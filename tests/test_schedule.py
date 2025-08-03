@@ -5,29 +5,37 @@ from pathlib import Path
 # Ensure the project root is on the import path
 sys.path.insert(0, os.path.abspath(os.path.join(Path(__file__).resolve().parent, "..")))
 
-from fin import calculate_snowball_plan
+from avalanche import daily_avalanche_schedule
 
 
 def test_balances_never_negative():
-    """Run the snowball scheduler for ~360 days and ensure balances stay non-negative."""
+    """Run the avalanche scheduler and ensure balances stay non-negative."""
+    paychecks = [
+        {"amount": 3000.0, "date": "2025-01-01"},
+        {"amount": 3000.0, "date": "2025-02-01"},
+    ]
     bills = [
-        {"name": "Rent", "amount": 1000.0},
-        {"name": "Utilities", "amount": 200.0},
+        {"amount": 1000.0, "date": "2025-01-10"},
+        {"amount": 200.0, "date": "2025-01-20"},
     ]
-
-    incomes = [
-        {"name": "Salary", "amount": 3000.0, "frequency": "monthly", "start_date": "2025-01-01"},
-    ]
-
     debts = [
-        {"name": "Credit Card", "balance": 500.0, "minimum_payment": 50.0, "apr": 15.0},
-        {"name": "Car Loan", "balance": 1500.0, "minimum_payment": 100.0, "apr": 6.0},
+        {
+            "name": "Credit Card",
+            "balance": 500.0,
+            "apr": 15.0,
+            "minimum_payment": 50.0,
+            "due_date": "2025-01-25",
+        },
+        {
+            "name": "Car Loan",
+            "balance": 1500.0,
+            "apr": 6.0,
+            "minimum_payment": 100.0,
+            "due_date": "2025-02-15",
+        },
     ]
 
-    # Run scheduling for approximately 360 days (12 months)
-    schedule, _ = calculate_snowball_plan(bills, incomes, debts, forecast_months=12)
+    schedule, _ = daily_avalanche_schedule(0, paychecks, bills, debts)
 
-    # Ensure all recorded balances are non-negative throughout the schedule
-    for month_data in schedule:
-        for balance in month_data["remaining_balances"].values():
-            assert balance >= 0, f"Negative balance {balance} recorded in {month_data['date']}"
+    for event in schedule:
+        assert event["balance"] >= 0, f"Negative balance {event['balance']} on {event['date']}"
