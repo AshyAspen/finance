@@ -37,10 +37,8 @@ def get_paydays_in_month(year, month, pay_cycle_start_date, frequency_weeks):
             
     return paydays
 
-def calculate_snowball_plan(bills, incomes, debts, forecast_months):
-    """
-    Calculates a debt snowball payment plan based on monthly cash flow surplus.
-    """
+def calculate_avalanche_plan(bills, incomes, debts, forecast_months):
+    """Calculate a debt avalanche payment plan based on monthly surplus."""
     # --- Data Initialization ---
     for debt in debts:
         debt['balance'] = Decimal(str(debt['balance']))
@@ -74,8 +72,10 @@ def calculate_snowball_plan(bills, incomes, debts, forecast_months):
         monthly_bills = sum(Decimal(str(b['amount'])) for b in bills)
         cash_for_debts = monthly_income - monthly_bills
         
-        # --- 2. Apply Interest and Sort Debts for Snowball ---
-        active_debts = sorted([d for d in debts if not d['paid_off']], key=lambda x: x['balance'])
+        # --- 2. Apply Interest and Sort Debts for Avalanche ---
+        active_debts = sorted(
+            [d for d in debts if not d['paid_off']], key=lambda x: x['apr'], reverse=True
+        )
         
         if not active_debts:
             break
@@ -87,7 +87,7 @@ def calculate_snowball_plan(bills, incomes, debts, forecast_months):
             total_interest_paid += monthly_interest
             monthly_payments[debt['name']] = {'interest': monthly_interest, 'payment': Decimal('0')}
 
-        # --- 3. CORRECTED: Distribute Payments with True Snowball Logic ---
+        # --- 3. Distribute Payments with Avalanche Logic ---
         available_for_payments = cash_for_debts
         target_debt = active_debts[0]
 
@@ -126,14 +126,84 @@ def calculate_snowball_plan(bills, incomes, debts, forecast_months):
         
     return payment_schedule, total_interest_paid
 
+
+def daily_avalanche_schedule(current_balance, bills, incomes, debts, days=60):
+    """Return daily balances and debt payments for the next ``days`` days."""
+
+    start_date = datetime.date.today()
+    balance = Decimal(str(current_balance))
+
+    daily_minimums = {}
+    for debt in debts:
+        debt['balance'] = Decimal(str(debt['balance']))
+        debt['minimum_payment'] = Decimal(str(debt['minimum_payment']))
+        debt['apr'] = Decimal(str(debt['apr']))
+        daily_minimums[debt['name']] = debt['minimum_payment'] / Decimal('30')
+
+    daily_bills = sum(Decimal(str(b['amount'])) for b in bills) / Decimal('30')
+
+    paydates: dict[datetime.date, list[Decimal]] = {}
+    end_date = start_date + datetime.timedelta(days=days)
+    for income in incomes:
+        amount = Decimal(str(income['amount']))
+        freq_weeks = 2 if income['frequency'] == 'bi-weekly' else 1
+        pay_date = datetime.datetime.strptime(income['start_date'], "%Y-%m-%d").date()
+        while pay_date < end_date:
+            if pay_date >= start_date:
+                paydates.setdefault(pay_date, []).append(amount)
+            pay_date += relativedelta(weeks=freq_weeks)
+
+    schedule = []
+    for offset in range(days):
+        current_date = start_date + datetime.timedelta(days=offset)
+
+        for amt in paydates.get(current_date, []):
+            balance += amt
+
+        payments = {}
+
+        balance -= daily_bills
+
+        for debt in debts:
+            if debt['balance'] <= 0:
+                continue
+            min_pay = min(daily_minimums[debt['name']], debt['balance'])
+            balance -= min_pay
+            debt['balance'] -= min_pay
+            payments[debt['name']] = min_pay
+
+        future_paydates = [d for d in paydates if d > current_date]
+        next_pay = min(future_paydates) if future_paydates else end_date
+        days_until_next_pay = (next_pay - current_date).days
+        daily_required = daily_bills + sum(
+            min(daily_minimums[d['name']], d['balance']) for d in debts if d['balance'] > 0
+        )
+        buffer = daily_required * days_until_next_pay
+        extra = balance - buffer
+        if extra > 0:
+            active_debts = [d for d in debts if d['balance'] > 0]
+            if active_debts:
+                target = max(active_debts, key=lambda x: x['apr'])
+                extra_payment = min(extra, target['balance'])
+                balance -= extra_payment
+                target['balance'] -= extra_payment
+                payments[target['name']] = payments.get(target['name'], Decimal('0')) + extra_payment
+
+        schedule.append(
+            {
+                'date': current_date.isoformat(),
+                'balance': balance,
+                'payments': payments,
+            }
+        )
+
+    return schedule
+
 def main():
-    """
-    Main function to define inputs and print the debt snowball forecast.
-    """
-    print("---  Debt Snowball Forecaster ---")
-    
-    # --- 📝 1. YOUR PERSONAL FINANCES ---
-    forecast_months = 84 # 7 years
+    """Prompt for balance and show 60-day avalanche payment forecast."""
+    print("---  Debt Avalanche Forecaster ---")
+
+    current_balance = Decimal(input("Enter current account balance: ").strip())
 
     bills = [
         {'name': 'Rent', 'amount': 200.00},
@@ -150,7 +220,12 @@ def main():
     ]
 
     incomes = [
-        {'name': 'Paycheck', 'amount': 1100.00, 'frequency': 'bi-weekly', 'start_date': '2025-08-12'},
+        {
+            'name': 'Paycheck',
+            'amount': 1100.00,
+            'frequency': 'bi-weekly',
+            'start_date': '2025-08-12',
+        },
     ]
 
     debts = [
@@ -162,36 +237,21 @@ def main():
         {'name': 'Auto Loan', 'balance': 25970.64, 'minimum_payment': 463.11, 'apr': 8.5},
     ]
 
-    # --- ⚙️ 2. RUN THE CALCULATION ---
-    schedule, total_interest = calculate_snowball_plan(bills, incomes, debts, forecast_months)
+    schedule = daily_avalanche_schedule(current_balance, bills, incomes, debts, days=60)
 
-    # --- 📊 3. DISPLAY THE RESULT ---
-    if not schedule:
-        print("\nCould not generate a payment schedule. Check your income and bills.")
-        return
+    print("\n--- 60-Day Payment Plan ---")
+    for day in schedule:
+        if day['payments']:
+            pays = ", ".join(
+                f"{name}: ${amount:.2f}" for name, amount in day['payments'].items()
+            )
+            print(f"{day['date']}: balance=${day['balance']:.2f} | payments -> {pays}")
+        else:
+            print(f"{day['date']}: balance=${day['balance']:.2f}")
 
-    print("\n--- Your Debt Payoff Plan ---\n")
-    for month_data in schedule:
-        print(f"--- Month {month_data['month']}: {month_data['date']} ---")
-        sorted_debt_names = [d['name'] for d in debts]
-        for debt_name in sorted_debt_names:
-            if debt_name not in month_data['details']: continue
-            payment = month_data['details'][debt_name].get('payment', Decimal('0'))
-            new_balance = month_data['remaining_balances'][debt_name]
-            if new_balance <= 0 and (new_balance + payment) > 0:
-                 print(f"✅ {debt_name}: Paid off! (Final payment: ${payment:,.2f})")
-            elif new_balance > 0:
-                print(f"  - {debt_name}: Pay ${payment:,.2f}  (New Balance: ${new_balance:,.2f})")
-        print("-" * 40)
-
-    print("\n--- 🎉 Forecast Summary 🎉 ---")
-    if any(d['balance'] > 0 for d in debts):
-        print("Warning: Not all debts were paid off within the forecast period.")
-    else:
-        debt_free_date = schedule[-1]['date']
-        print(f"Projected Debt-Free Date: {debt_free_date}")
-        print(f"Total Months to Pay Off: {len(schedule)}")
-    print(f"Total Interest Paid: ${total_interest:,.2f}")
+    print("\nRemaining Balances:")
+    for debt in debts:
+        print(f" - {debt['name']}: ${debt['balance']:.2f}")
 
 if __name__ == "__main__":
     main()
