@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 # Ensure the project root is on the import path
@@ -10,13 +11,13 @@ from avalanche import daily_avalanche_schedule
 
 def test_balances_never_negative():
     """Run the avalanche scheduler and ensure balances stay non-negative."""
+    today = date.today()
     paychecks = [
-        {"amount": 3000.0, "date": "2025-01-01"},
-        {"amount": 3000.0, "date": "2025-02-01"},
+        {"amount": 3000.0, "date": today.isoformat()},
     ]
     bills = [
-        {"amount": 1000.0, "date": "2025-01-10"},
-        {"amount": 200.0, "date": "2025-01-20"},
+        {"amount": 1000.0, "date": (today + timedelta(days=10)).isoformat()},
+        {"amount": 200.0, "date": (today + timedelta(days=20)).isoformat()},
     ]
     debts = [
         {
@@ -24,14 +25,14 @@ def test_balances_never_negative():
             "balance": 500.0,
             "apr": 15.0,
             "minimum_payment": 50.0,
-            "due_date": "2025-01-25",
+            "due_date": (today + timedelta(days=25)).isoformat(),
         },
         {
             "name": "Car Loan",
             "balance": 1500.0,
             "apr": 6.0,
             "minimum_payment": 100.0,
-            "due_date": "2025-02-15",
+            "due_date": (today + timedelta(days=35)).isoformat(),
         },
     ]
 

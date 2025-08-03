@@ -2,10 +2,11 @@ from __future__ import annotations
 
 """Generate a daily debt payment schedule using the avalanche method.
 
-The schedule processes financial events in chronological order. On each day
-income is applied first, then any bill or minimum debt payment due that day is
-paid. Remaining cash that can safely be used (as calculated by
-:func:`cash_flow.max_safe_payment`) is directed to the highest-APR debt.
+The simulation starts on the current date and builds recurring income, bill,
+and debt events through the requested horizon. On each day income is applied
+first, then any bill or minimum debt payment due that day is paid. Remaining
+cash that can safely be used (as calculated by :func:`cash_flow.max_safe_payment`)
+is directed to the highest-APR debt.
 """
 
 from dataclasses import dataclass
@@ -66,20 +67,29 @@ def _build_events(
     end: date,
 ) -> List[Event]:
     events: List[Event] = []
+
+    # Generate recurring paychecks
     for p in paychecks:
-        pd = _parse_date(p["date"])
-        if pd > end:
-            continue
-        events.append(
-            Event(
-                date=pd,
-                type="paycheck",
-                amount=Decimal(str(p["amount"])),
-                name=p.get("name", "Paycheck"),
+        current = _parse_date(p["date"])
+        # Advance to the first occurrence on or after start
+        while current < start:
+            current = _add_month(current)
+        while current <= end:
+            events.append(
+                Event(
+                    date=current,
+                    type="paycheck",
+                    amount=Decimal(str(p["amount"])),
+                    name=p.get("name", "Paycheck"),
+                )
             )
-        )
+            current = _add_month(current)
+
+    # Recurring bills
     for b in bills:
         current = _parse_date(b["date"])
+        while current < start:
+            current = _add_month(current)
         while current <= end:
             events.append(
                 Event(
@@ -90,13 +100,18 @@ def _build_events(
                 )
             )
             current = _add_month(current)
+
+    # Minimum debt payments
     for d in debts:
         if d.due_date is None or d.minimum_payment <= 0:
             continue
         current = d.due_date
+        while current < start:
+            current = _add_month(current)
         while current <= end:
             events.append(Event(current, "debt_min", d.minimum_payment, d.name))
             current = _add_month(current)
+
     events.sort(key=lambda e: e.date)
     return events
 
@@ -143,7 +158,7 @@ def daily_avalanche_schedule(
 
     balance = Decimal(str(starting_balance))
 
-    start = min(_parse_date(p["date"]) for p in paychecks)
+    start = date.today()
     end = start + timedelta(days=days)
 
     # Prepare debt objects for tracking balances and APRs
