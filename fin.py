@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date
 from decimal import Decimal
 from avalanche import daily_avalanche_schedule
 
@@ -10,47 +10,28 @@ def main() -> None:
     start_balance = Decimal(input("Enter current account balance: ").strip())
 
 
+    today = date.today()
+    month_start = today.replace(day=1)
+    next_month_start = date(month_start.year + (month_start.month // 12), (month_start.month % 12) + 1, 1)
+
     bills = [
-        {"name": "Rent", "amount": 200.00, "date": "2025-08-01"},
-        {"name": "Student Loan", "amount": 184.86, "date": "2025-08-05"},
-        {"name": "Car Insurance", "amount": 206.33, "date": "2025-08-10"},
-        {"name": "iCloud", "amount": 9.99, "date": "2025-08-15"},
-        {"name": "Copilot", "amount": 13.00, "date": "2025-08-20"},
-        {"name": "HP Instant Ink", "amount": 8.43, "date": "2025-08-25"},
-        {"name": "ChatGPT", "amount": 20.00, "date": "2025-09-01"},
-        {"name": "Gas", "amount": 150.00, "date": "2025-09-05"},
-        {"name": "Food", "amount": 200.00, "date": "2025-09-10"},
-        {"name": "Medications", "amount": 50.97, "date": "2025-09-15"},
-        {"name": "Tests", "amount": 20.53, "date": "2025-09-20"},
+        {"name": "Rent", "amount": 200.00, "date": month_start.replace(day=1).isoformat()},
+        {"name": "Student Loan", "amount": 184.86, "date": month_start.replace(day=5).isoformat()},
+        {"name": "Car Insurance", "amount": 206.33, "date": month_start.replace(day=10).isoformat()},
+        {"name": "iCloud", "amount": 9.99, "date": month_start.replace(day=15).isoformat()},
+        {"name": "Copilot", "amount": 13.00, "date": month_start.replace(day=20).isoformat()},
+        {"name": "HP Instant Ink", "amount": 8.43, "date": month_start.replace(day=25).isoformat()},
+        {"name": "ChatGPT", "amount": 20.00, "date": next_month_start.replace(day=1).isoformat()},
+        {"name": "Gas", "amount": 150.00, "date": next_month_start.replace(day=5).isoformat()},
+        {"name": "Food", "amount": 200.00, "date": next_month_start.replace(day=10).isoformat()},
+        {"name": "Medications", "amount": 50.97, "date": next_month_start.replace(day=15).isoformat()},
+        {"name": "Tests", "amount": 20.53, "date": next_month_start.replace(day=20).isoformat()},
     ]
 
-    incomes = [
-        {
-            "name": "Paycheck",
-            "amount": 1100.00,
-            "start_date": "2025-08-12",
-            "frequency": "bi-weekly",
-        }
+    paychecks = [
+        {"name": "Paycheck 1", "amount": 1100.00, "date": month_start.replace(day=12).isoformat()},
+        {"name": "Paycheck 2", "amount": 1100.00, "date": month_start.replace(day=26).isoformat()},
     ]
-
-    def generate_paychecks(sources, days=60):
-        paychecks = []
-        for src in sources:
-            current = datetime.strptime(src["start_date"], "%Y-%m-%d").date()
-            end = current + timedelta(days=days)
-            delta = timedelta(weeks=2) if src["frequency"] == "bi-weekly" else timedelta(weeks=1)
-            while current <= end:
-                paychecks.append(
-                    {
-                        "name": src["name"],
-                        "amount": src["amount"],
-                        "date": current.isoformat(),
-                    }
-                )
-                current += delta
-        return paychecks
-
-    paychecks = generate_paychecks(incomes)
 
     debts = [
         {
@@ -58,42 +39,42 @@ def main() -> None:
             "balance": 919.44,
             "minimum_payment": 54.08,
             "apr": 0.0,
-            "due_date": "2025-08-28",
+            "due_date": month_start.replace(day=28).isoformat(),
         },
         {
             "name": "Patient Fi Loan",
             "balance": 1555.00,
             "minimum_payment": 64.80,
             "apr": 0.0,
-            "due_date": "2025-09-02",
+            "due_date": next_month_start.replace(day=2).isoformat(),
         },
         {
             "name": "Citi Card",
             "balance": 1925.00,
             "minimum_payment": 20.00,
             "apr": 23.24,
-            "due_date": "2025-08-25",
+            "due_date": month_start.replace(day=25).isoformat(),
         },
         {
             "name": "Apple Card",
             "balance": 4145.93,
             "minimum_payment": 119.00,
             "apr": 26.24,
-            "due_date": "2025-09-07",
+            "due_date": next_month_start.replace(day=7).isoformat(),
         },
         {
             "name": "Alpheon Loan",
             "balance": 5195.00,
             "minimum_payment": 153.00,
             "apr": 0.0,
-            "due_date": "2025-09-15",
+            "due_date": next_month_start.replace(day=15).isoformat(),
         },
         {
             "name": "Auto Loan",
             "balance": 25970.64,
             "minimum_payment": 463.11,
             "apr": 8.5,
-            "due_date": "2025-09-20",
+            "due_date": next_month_start.replace(day=20).isoformat(),
         },
     ]
 
