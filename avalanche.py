@@ -2,12 +2,10 @@ from __future__ import annotations
 
 """Generate a daily debt payment schedule using the avalanche method.
 
-The schedule processes a chronologically sorted list of financial events and
-routes surplus cash to the highest-APR debt while ensuring upcoming bills are
-covered.  The algorithm operates on paydays: income is deposited, bills due
-before the next payday are paid, and any remaining safe cash (as calculated by
-:func:`cash_flow.max_safe_payment`) is sent as an extra payment toward the
-highest-APR debt.
+The schedule processes financial events in chronological order. On each day
+income is applied first, then any bill or minimum debt payment due that day is
+paid. Remaining cash that can safely be used (as calculated by
+:func:`cash_flow.max_safe_payment`) is directed to the highest-APR debt.
 """
 
 from dataclasses import dataclass
@@ -163,82 +161,80 @@ def daily_avalanche_schedule(
 
     events = _build_events(paychecks, bills, debts, start, end)
 
-    # Separate lists for ease of future lookups
-    pay_events = [e for e in events if e.type == "paycheck"]
-    other_events = [e for e in events if e.type != "paycheck"]
-
     schedule: List[dict] = []
 
-    for i, payday in enumerate(pay_events):
-        next_payday = pay_events[i + 1].date if i + 1 < len(pay_events) else None
+    i = 0
+    while i < len(events):
+        current_date = events[i].date
+        todays: List[Event] = []
+        while i < len(events) and events[i].date == current_date:
+            todays.append(events[i])
+            i += 1
 
-        # Deposit income
-        balance += payday.amount
-        schedule.append(
-            {
-                "date": payday.date,
-                "type": "paycheck",
-                "description": payday.name,
-                "amount": payday.amount,
-                "balance": balance,
-            }
-        )
+        # Process income first
+        for ev in [e for e in todays if e.type == "paycheck"]:
+            balance += ev.amount
+            schedule.append(
+                {
+                    "date": ev.date,
+                    "type": "paycheck",
+                    "description": ev.name,
+                    "amount": ev.amount,
+                    "balance": balance,
+                }
+            )
 
-        # Pay bills/debt minimums due before the next payday on this payday
-        remaining_events: List[Event] = []
-        for ev in other_events:
-            due_now = ev.date <= payday.date or (next_payday is None or ev.date < next_payday)
-            if due_now:
-                payment_amount = ev.amount
-                if ev.type == "debt_min":
-                    debt = debt_lookup[ev.name]
-                    payment_amount = min(ev.amount, debt.balance)
-                    if payment_amount <= 0:
-                        continue
-                    debt.balance -= payment_amount
-                balance -= payment_amount
-                schedule.append(
-                    {
-                        "date": payday.date,
-                        "type": ev.type,
+        # Then pay bills or minimum debt payments for the day
+        for ev in [e for e in todays if e.type != "paycheck"]:
+            payment_amount = ev.amount
+            if ev.type == "debt_min":
+                debt = debt_lookup[ev.name]
+                payment_amount = min(ev.amount, debt.balance)
+                if payment_amount <= 0:
+                    continue
+                debt.balance -= payment_amount
+            balance -= payment_amount
+            schedule.append(
+                {
+                    "date": ev.date,
+                    "type": ev.type,
+                    "description": ev.name,
+                    "amount": -payment_amount,
+                    "balance": balance,
+                }
+            )
 
-                        "description": ev.name,
-                        "amount": -payment_amount,
-                        "balance": balance,
-                    }
-                )
-            else:
-                remaining_events.append(ev)
-        other_events = remaining_events
-
-        # Build future events for safe-payment calculation
+        # Future events for safe-payment calculation
+        future_events = events[i:]
         future_bills = [
             {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in other_events
+            for ev in future_events
+            if ev.type != "paycheck"
         ]
         future_incomes = [
-            {"amount": p.amount, "date": p.date.isoformat()}
-            for p in pay_events[i + 1 :]
+            {"amount": ev.amount, "date": ev.date.isoformat()}
+            for ev in future_events
+            if ev.type == "paycheck"
         ]
         safe = max_safe_payment(balance, future_bills, future_incomes)
 
         if safe > 0:
-            # Target highest-APR debt with remaining balance
             active_debts = [d for d in debts if d.balance > 0]
             if active_debts:
                 target = max(active_debts, key=lambda d: d.apr)
                 payment = min(safe, target.balance)
-                target.balance -= payment
-                balance -= payment
-                schedule.append(
-                    {
-                        "date": payday.date,
-                        "type": "extra",
-                        "description": f"Extra payment to {target.name}",
-                        "amount": -payment,
-                        "balance": balance,
-                    }
-                )
+                if payment > 0:
+                    target.balance -= payment
+                    balance -= payment
+                    schedule.append(
+                        {
+                            "date": current_date,
+                            "type": "extra",
+                            "description": f"Extra payment to {target.name}",
+                            "amount": -payment,
+                            "balance": balance,
+                        }
+                    )
 
     return schedule, [
         {
