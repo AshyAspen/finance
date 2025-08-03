@@ -11,9 +11,10 @@ highest-APR debt.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Iterable, List, Optional, Tuple
+from calendar import monthrange
 
 from cash_flow import max_safe_payment
 
@@ -38,11 +39,6 @@ class Debt:
     minimum_payment: Decimal
     due_date: Optional[date] = None
 
-    def to_min_event(self) -> Event:
-        if self.due_date is None:
-            raise ValueError("debt due_date required for minimum payment event")
-        return Event(self.due_date, "debt_min", self.minimum_payment, self.name)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,31 +50,65 @@ def _parse_date(value: date | str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def _build_events(paychecks: Iterable[dict], bills: Iterable[dict], debts: Iterable[Debt]) -> List[Event]:
+def _add_month(d: date) -> date:
+    """Return a date one month after ``d`` preserving month length."""
+
+    year = d.year + (d.month // 12)
+    month = d.month % 12 + 1
+    day = min(d.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _build_events(
+    paychecks: Iterable[dict],
+    bills: Iterable[dict],
+    debts: Iterable[Debt],
+    start: date,
+    end: date,
+) -> List[Event]:
     events: List[Event] = []
     for p in paychecks:
+        pd = _parse_date(p["date"])
+        if pd > end:
+            continue
         events.append(
             Event(
-                date=_parse_date(p["date"]),
+                date=pd,
                 type="paycheck",
                 amount=Decimal(str(p["amount"])),
                 name=p.get("name", "Paycheck"),
             )
         )
     for b in bills:
-        events.append(
-            Event(
-                date=_parse_date(b["date"]),
-                type="bill",
-                amount=Decimal(str(b["amount"])),
-                name=b.get("name", "Bill"),
+        current = _parse_date(b["date"])
+        while current <= end:
+            events.append(
+                Event(
+                    date=current,
+                    type="bill",
+                    amount=Decimal(str(b["amount"])),
+                    name=b.get("name", "Bill"),
+                )
             )
-        )
+            current = _add_month(current)
     for d in debts:
-        if d.due_date is not None and d.minimum_payment > 0:
-            events.append(d.to_min_event())
+        if d.due_date is None or d.minimum_payment <= 0:
+            continue
+        current = d.due_date
+        while current <= end:
+            events.append(Event(current, "debt_min", d.minimum_payment, d.name))
+            current = _add_month(current)
     events.sort(key=lambda e: e.date)
     return events
+
+
+def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
+    if due is None:
+        return None
+    current = due
+    while current <= end:
+        current = _add_month(current)
+    return current
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +120,7 @@ def daily_avalanche_schedule(
     paychecks: Iterable[dict],
     bills: Iterable[dict],
     debts_input: Iterable[dict],
+    days: int = 60,
 ) -> Tuple[List[dict], List[dict]]:
     """Return scheduled transactions and final debt balances using the avalanche method.
 
@@ -113,6 +144,9 @@ def daily_avalanche_schedule(
 
     balance = Decimal(str(starting_balance))
 
+    start = min(_parse_date(p["date"]) for p in paychecks)
+    end = start + timedelta(days=days)
+
     # Prepare debt objects for tracking balances and APRs
     debts: List[Debt] = [
         Debt(
@@ -126,7 +160,7 @@ def daily_avalanche_schedule(
     ]
     debt_lookup = {d.name: d for d in debts}
 
-    events = _build_events(paychecks, bills, debts)
+    events = _build_events(paychecks, bills, debts, start, end)
 
     # Separate lists for ease of future lookups
     pay_events = [e for e in events if e.type == "paycheck"]
@@ -204,5 +238,12 @@ def daily_avalanche_schedule(
                     }
                 )
 
-    return schedule, [{"name": d.name, "balance": d.balance} for d in debts]
+    return schedule, [
+        {
+            "name": d.name,
+            "balance": d.balance,
+            "next_due_date": _next_due_date(d.due_date, end),
+        }
+        for d in debts
+    ]
 

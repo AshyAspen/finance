@@ -141,7 +141,9 @@ def main() -> None:
 
     print("\nRemaining debt balances after 60 days:")
     for d in debts_after:
-        print(f"  {d['name']}: ${d['balance']:.2f}")
+        due = d.get("next_due_date")
+        due_str = due.isoformat() if due else "N/A"
+        print(f"  {d['name']}: ${d['balance']:.2f} (next due {due_str})")
 
 
 if __name__ == "__main__":

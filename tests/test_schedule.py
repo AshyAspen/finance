@@ -17,8 +17,6 @@ def test_balances_never_negative():
     bills = [
         {"amount": 1000.0, "date": "2025-01-10"},
         {"amount": 200.0, "date": "2025-01-20"},
-        {"amount": 1000.0, "date": "2025-02-10"},
-        {"amount": 200.0, "date": "2025-02-20"},
     ]
     debts = [
         {
