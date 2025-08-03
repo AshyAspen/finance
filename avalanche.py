@@ -50,6 +50,7 @@ def _parse_date(value: date | str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
+
 def _add_month(d: date) -> date:
     """Return a date one month after ``d`` preserving month length."""
 
@@ -200,6 +201,7 @@ def daily_avalanche_schedule(
                     {
                         "date": payday.date,
                         "type": ev.type,
+
                         "description": ev.name,
                         "amount": -payment_amount,
                         "balance": balance,

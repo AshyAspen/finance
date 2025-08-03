@@ -9,6 +9,7 @@ def main() -> None:
     print("---  Debt Avalanche Forecaster ---")
     start_balance = Decimal(input("Enter current account balance: ").strip())
 
+
     bills = [
         {"name": "Rent", "amount": 200.00, "date": "2025-08-01"},
         {"name": "Student Loan", "amount": 184.86, "date": "2025-08-05"},
