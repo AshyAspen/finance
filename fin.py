@@ -1,9 +1,11 @@
-from event_scheduler import forecast_events
+from decimal import Decimal
+from avalanche import daily_avalanche_schedule
 
 
-def main():
-    """Run a 60-day event-based debt forecast."""
-    start_balance = 100
+def main() -> None:
+    """Run a 60-day event-based debt forecast using the avalanche scheduler."""
+    print("---  Debt Avalanche Forecaster ---")
+    start_balance = Decimal(input("Enter current account balance: ").strip())
 
     bills = [
         {"name": "Phone", "amount": 50, "date": "2025-08-20"},
@@ -11,7 +13,7 @@ def main():
         {"name": "Insurance", "amount": 100, "date": "2025-09-10"},
     ]
 
-    incomes = [
+    paychecks = [
         {"name": "Paycheck", "amount": 1100, "date": "2025-08-12"},
         {"name": "Paycheck", "amount": 1100, "date": "2025-08-26"},
         {"name": "Paycheck", "amount": 1100, "date": "2025-09-09"},
@@ -19,16 +21,33 @@ def main():
     ]
 
     debts = [
-        {"name": "Credit Card", "balance": 500, "minimum_payment": 25, "apr": 20.0, "due_day": 15},
-        {"name": "Loan", "balance": 1000, "minimum_payment": 50, "apr": 5.0, "due_day": 5},
+        {
+            "name": "Credit Card",
+            "balance": 500,
+            "apr": 20.0,
+            "minimum_payment": 25,
+            "due_date": "2025-08-15",
+        },
+        {
+            "name": "Loan",
+            "balance": 1000,
+            "apr": 5.0,
+            "minimum_payment": 50,
+            "due_date": "2025-09-05",
+        },
     ]
 
-    events, debts_after = forecast_events(start_balance, bills, incomes, debts, days=60)
+    schedule, debts_after = daily_avalanche_schedule(
+        start_balance, paychecks, bills, debts
+    )
 
-    for ev in events:
+    for ev in schedule:
+        bills_paid = (-ev["amount"]) if ev["type"] == "bill" else Decimal("0")
+        mins_paid = (-ev["amount"]) if ev["type"] == "debt_min" else Decimal("0")
+        extra_paid = (-ev["amount"]) if ev["type"] == "extra" else Decimal("0")
         print(
-            f"{ev['date']} | Balance: ${ev['balance']:.2f} | "
-            f"Bills: ${ev['bills']:.2f} | Minimums: ${ev['minimums']:.2f} | Extra: ${ev['extra']:.2f}"
+            f"{ev['date']}: balance=${ev['balance']:.2f} "
+            f"(bills=${bills_paid:.2f}, minimums=${mins_paid:.2f}, extra=${extra_paid:.2f})"
         )
 
     print("\nRemaining debt balances after 60 days:")
