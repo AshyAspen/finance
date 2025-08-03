@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Generate a daily debt payment schedule using the avalanche method.
 
-The simulation starts on the current date and builds recurring income, bill,
-and debt events through the requested horizon. On each day income is applied
-first, then any bill or minimum debt payment due that day is paid. Remaining
-cash that can safely be used (as calculated by :func:`cash_flow.max_safe_payment`)
-is directed to the highest-APR debt.
+The simulation starts on the first day of the current month and builds
+recurring income, bill, and debt events through the requested horizon. On
+each day income is applied first, then any bill or minimum debt payment due
+that day is paid. Remaining cash that can safely be used (as calculated by
+``cash_flow.max_safe_payment``) is directed to the highest-APR debt.
 """
 
 from dataclasses import dataclass
@@ -158,7 +158,7 @@ def daily_avalanche_schedule(
 
     balance = Decimal(str(starting_balance))
 
-    start = date.today()
+    start = date.today().replace(day=1)
     end = start + timedelta(days=days)
 
     # Prepare debt objects for tracking balances and APRs
