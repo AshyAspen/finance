@@ -29,8 +29,12 @@ def main() -> None:
     ]
 
     paychecks = [
-        {"name": "Paycheck 1", "amount": 1100.00, "date": month_start.replace(day=12).isoformat()},
-        {"name": "Paycheck 2", "amount": 1100.00, "date": month_start.replace(day=26).isoformat()},
+        {
+            "name": "Paycheck",
+            "amount": 1100.00,
+            "date": date(2025, 7, 29).isoformat(),
+            "frequency": "biweekly",
+        },
     ]
 
     debts = [

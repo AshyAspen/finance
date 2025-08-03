@@ -61,6 +61,24 @@ def _add_month(d: date) -> date:
     return date(year, month, day)
 
 
+def _advance_paycheck(current: date, freq: str, first_day: int) -> date:
+    """Return the next paycheck date based on ``freq`` starting from ``current``."""
+
+    if freq == "weekly":
+        return current + timedelta(weeks=1)
+    if freq == "biweekly":
+        return current + timedelta(weeks=2)
+    if freq == "semi-monthly":
+        second_day = min(first_day + 15, monthrange(current.year, current.month)[1])
+        if current.day == first_day:
+            return current.replace(day=second_day)
+        next_month = _add_month(current.replace(day=1))
+        return next_month.replace(
+            day=min(first_day, monthrange(next_month.year, next_month.month)[1])
+        )
+    return _add_month(current)
+
+
 def _build_events(
     paychecks: Iterable[dict],
     bills: Iterable[dict],
@@ -73,9 +91,10 @@ def _build_events(
     # Generate recurring paychecks
     for p in paychecks:
         current = _parse_date(p["date"])
-        # Advance to the first occurrence on or after start
+        freq = p.get("frequency", "monthly").lower()
+        first_day = current.day
         while current < start:
-            current = _add_month(current)
+            current = _advance_paycheck(current, freq, first_day)
         while current <= end:
             events.append(
                 Event(
@@ -85,7 +104,7 @@ def _build_events(
                     name=p.get("name", "Paycheck"),
                 )
             )
-            current = _add_month(current)
+            current = _advance_paycheck(current, freq, first_day)
 
     # Recurring bills
     for b in bills:
