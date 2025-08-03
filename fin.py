@@ -2,6 +2,8 @@ import datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal, getcontext
 
+from cash_flow import max_safe_payment
+
 # Use Decimal for precise financial calculations
 getcontext().prec = 10
 
@@ -72,13 +74,18 @@ def calculate_snowball_plan(bills, incomes, debts, forecast_months):
                 monthly_income += amount * num_paydays
 
         monthly_bills = sum(Decimal(str(b['amount'])) for b in bills)
-        cash_for_debts = monthly_income - monthly_bills
-        
-        # --- 2. Apply Interest and Sort Debts for Snowball ---
-        active_debts = sorted([d for d in debts if not d['paid_off']], key=lambda x: x['balance'])
-        
+        available_cash = monthly_income - monthly_bills
+
+        # --- 2. Determine Safe Extra Payment and Apply Interest ---
+        active_debts = [d for d in debts if not d['paid_off']]
         if not active_debts:
             break
+
+        debt_min_events = [
+            {'amount': float(d['minimum_payment']), 'date': current_date.strftime('%Y-%m-%d')}
+            for d in active_debts
+        ]
+        surplus = max_safe_payment(available_cash, debt_min_events, [])
 
         monthly_payments = {}
         for debt in active_debts:
@@ -87,32 +94,32 @@ def calculate_snowball_plan(bills, incomes, debts, forecast_months):
             total_interest_paid += monthly_interest
             monthly_payments[debt['name']] = {'interest': monthly_interest, 'payment': Decimal('0')}
 
-        # --- 3. CORRECTED: Distribute Payments with True Snowball Logic ---
-        available_for_payments = cash_for_debts
-        target_debt = active_debts[0]
-
-        # First, pay minimums on all NON-TARGET debts
+        # --- 3. Pay Minimums Then Apply Surplus to Highest APR Debt ---
+        available_for_payments = available_cash
         for debt in active_debts:
-            if debt != target_debt:
-                # Pay the minimum, but not more than the balance or what's available
-                payment_amount = min(debt['minimum_payment'], debt['balance'])
-                actual_payment = min(available_for_payments, payment_amount)
-                
-                debt['balance'] -= actual_payment
-                available_for_payments -= actual_payment
-                monthly_payments[debt['name']]['payment'] = actual_payment
-                
-                if debt['balance'] <= 0:
-                    debt['paid_off'] = True
+            min_payment = min(debt['minimum_payment'], debt['balance'])
+            actual_payment = min(available_for_payments, min_payment)
 
-        # Second, the ENTIRE remaining amount goes to the target debt
-        if target_debt and not target_debt['paid_off']:
-            target_payment_amount = min(available_for_payments, target_debt['balance'])
-            target_debt['balance'] -= target_payment_amount
-            monthly_payments[target_debt['name']]['payment'] = target_payment_amount
-            
-            if target_debt['balance'] <= 0:
-                target_debt['paid_off'] = True
+            debt['balance'] -= actual_payment
+            available_for_payments -= actual_payment
+            monthly_payments[debt['name']]['payment'] = actual_payment
+
+            if debt['balance'] <= 0:
+                debt['paid_off'] = True
+
+        highest_apr_debt = max(
+            (d for d in active_debts if not d['paid_off']),
+            key=lambda x: x['apr'],
+            default=None,
+        )
+        if highest_apr_debt and available_for_payments > 0 and surplus > 0:
+            extra_payment = min(surplus, available_for_payments, highest_apr_debt['balance'])
+            highest_apr_debt['balance'] -= extra_payment
+            monthly_payments[highest_apr_debt['name']]['payment'] += extra_payment
+            available_for_payments -= extra_payment
+
+            if highest_apr_debt['balance'] <= 0:
+                highest_apr_debt['paid_off'] = True
 
 
         # --- 4. Record the Month's Activity ---
