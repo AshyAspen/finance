@@ -39,6 +39,7 @@ class Debt:
     apr: Decimal
     minimum_payment: Decimal
     due_date: Optional[date] = None
+    paid_off_date: Optional[date] = None
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,9 @@ def daily_avalanche_schedule(
     Returns
     -------
     Tuple[List[dict], List[dict]]
-        ``schedule`` of transactions and a list of remaining ``debts`` with updated balances.
+        ``schedule`` of transactions and a list of ``debts`` with updated balances and
+        either a ``next_due_date`` for outstanding debts or a ``paid_off_date`` for debts
+        that have been fully repaid.
     """
 
     balance = Decimal(str(starting_balance))
@@ -229,6 +232,8 @@ def daily_avalanche_schedule(
                 if payment_amount <= 0:
                     continue
                 debt.balance -= payment_amount
+                if debt.balance <= 0 and debt.paid_off_date is None:
+                    debt.paid_off_date = ev.date
             balance -= payment_amount
             schedule.append(
                 {
@@ -261,6 +266,8 @@ def daily_avalanche_schedule(
                 payment = min(safe, target.balance)
                 if payment > 0:
                     target.balance -= payment
+                    if target.balance <= 0 and target.paid_off_date is None:
+                        target.paid_off_date = current_date
                     balance -= payment
                     schedule.append(
                         {
@@ -284,7 +291,10 @@ def daily_avalanche_schedule(
         {
             "name": d.name,
             "balance": d.balance,
-            "next_due_date": _next_due_date(d.due_date, end),
+            "next_due_date": None
+            if d.paid_off_date
+            else _next_due_date(d.due_date, end),
+            "paid_off_date": d.paid_off_date,
         }
         for d in debts
     ]
