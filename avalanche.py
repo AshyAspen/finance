@@ -47,6 +47,8 @@ class Debt:
     interest_charges: Decimal = Decimal("0")
     min_payment_formula: Optional[str] = None
     min_payment_args: dict = field(default_factory=dict)
+    balance_subject_to_interest: Decimal = Decimal("0")
+    grace_charges: List[Tuple[date, Decimal]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +282,7 @@ def daily_avalanche_schedule(
                     "min_payment_formula",
                 }
             },
+            balance_subject_to_interest=Decimal(str(d["balance"])),
         )
         for d in debts_input
     ]
@@ -321,6 +324,13 @@ def daily_avalanche_schedule(
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount
+                if (
+                    debt.min_payment_formula == "apple_card"
+                    and debt.balance_subject_to_interest == 0
+                ):
+                    debt.grace_charges.append((ev.date, ev.amount))
+                else:
+                    debt.balance_subject_to_interest += ev.amount
 
                 # Recompute the minimum payment after the additional charge
                 new_min = compute_min_payment(debt, current_date)
@@ -383,8 +393,22 @@ def daily_avalanche_schedule(
                 if payment_amount <= 0:
                     continue
                 debt.balance -= payment_amount
-                interest_pay = min(payment_amount, debt.interest_charges)
+                remaining = payment_amount
+                interest_pay = min(remaining, debt.interest_charges)
                 debt.interest_charges -= interest_pay
+                remaining -= interest_pay
+                principal_pay = min(remaining, debt.balance_subject_to_interest)
+                debt.balance_subject_to_interest -= principal_pay
+                remaining -= principal_pay
+                while remaining > 0 and debt.grace_charges:
+                    ch_date, amt = debt.grace_charges[0]
+                    applied = min(remaining, amt)
+                    amt -= applied
+                    remaining -= applied
+                    if amt == 0:
+                        debt.grace_charges.pop(0)
+                    else:
+                        debt.grace_charges[0] = (ch_date, amt)
                 if debt.balance <= 0 and debt.paid_off_date is None:
                     debt.paid_off_date = ev.date
             balance -= payment_amount
@@ -442,6 +466,7 @@ def daily_avalanche_schedule(
                     due_date=debt_lookup[fev.debt].due_date,
                     min_payment_formula=debt_lookup[fev.debt].min_payment_formula,
                     min_payment_args=debt_lookup[fev.debt].min_payment_args,
+                    balance_subject_to_interest=simulated_balances[fev.debt],
                 )
                 pending_min[fev.debt] = compute_min_payment(temp_debt, fev.date)
                 continue
@@ -478,8 +503,22 @@ def daily_avalanche_schedule(
                 payment = min(safe, target.balance)
                 if payment > 0:
                     target.balance -= payment
-                    interest_pay = min(payment, target.interest_charges)
+                    remaining = payment
+                    interest_pay = min(remaining, target.interest_charges)
                     target.interest_charges -= interest_pay
+                    remaining -= interest_pay
+                    principal_pay = min(remaining, target.balance_subject_to_interest)
+                    target.balance_subject_to_interest -= principal_pay
+                    remaining -= principal_pay
+                    while remaining > 0 and target.grace_charges:
+                        ch_date, amt = target.grace_charges[0]
+                        applied = min(remaining, amt)
+                        amt -= applied
+                        remaining -= applied
+                        if amt == 0:
+                            target.grace_charges.pop(0)
+                        else:
+                            target.grace_charges[0] = (ch_date, amt)
                     if target.balance <= 0 and target.paid_off_date is None:
                         target.paid_off_date = current_date
                     balance -= payment
@@ -493,14 +532,27 @@ def daily_avalanche_schedule(
                         }
                     )
 
-        # Accrue daily interest on principal only and apply it at month end
+        # Accrue daily interest on balances subject to interest
         for debt in debts:
-            if debt.balance > 0 and debt.apr > 0:
-                principal = debt.balance - debt.interest_charges
-                if principal > 0:
-                    interest = principal * debt.apr / Decimal("36500")
-                    debt.interest_buffer += interest
-                    debt.interest_accrued += interest
+            if debt.balance_subject_to_interest > 0 and debt.apr > 0:
+                interest = (
+                    debt.balance_subject_to_interest * debt.apr / Decimal("36500")
+                )
+                debt.interest_buffer += interest
+                debt.interest_accrued += interest
+
+        # Convert unpaid grace charges to interest-bearing balances at due date
+        for debt in debts:
+            if debt.due_date and current_date == debt.due_date:
+                if debt.grace_charges:
+                    for ch_date, amt in debt.grace_charges:
+                        days = (current_date - ch_date).days + 1
+                        retro = amt * debt.apr / Decimal("36500") * days
+                        debt.interest_buffer += retro
+                        debt.interest_accrued += retro
+                        debt.balance_subject_to_interest += amt
+                    debt.grace_charges.clear()
+                debt.due_date = _add_month(debt.due_date)
 
         next_day = current_date + timedelta(days=1)
         if next_day.month != current_date.month:
@@ -572,6 +624,9 @@ def daily_avalanche_schedule(
                     "date": current_date,
                     "balance": balance,
                     "debts": {d.name: d.balance for d in debts},
+                    "subject_to_interest": {
+                        d.name: d.balance_subject_to_interest for d in debts
+                    },
                     "interest_charges": {
                         d.name: d.interest_charges for d in debts
                     },
