@@ -19,6 +19,7 @@ from calendar import monthrange
 
 from cash_flow import projected_min_balance
 from minimum_payments import FORMULAS
+from interest import INTEREST_METHODS
 
 
 @dataclass
@@ -49,6 +50,7 @@ class Debt:
     min_payment_args: dict = field(default_factory=dict)
     balance_subject_to_interest: Decimal = Decimal("0")
     grace_charges: List[Tuple[date, Decimal]] = field(default_factory=list)
+    interest_method: str = "credit_card"
 
 
 # ---------------------------------------------------------------------------
@@ -280,9 +282,11 @@ def daily_avalanche_schedule(
                     "minimum_payment",
                     "due_date",
                     "min_payment_formula",
+                    "interest_method",
                 }
             },
             balance_subject_to_interest=Decimal(str(d["balance"])),
+            interest_method=d.get("interest_method", "credit_card"),
         )
         for d in debts_input
     ]
@@ -324,13 +328,9 @@ def daily_avalanche_schedule(
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount
-                if (
-                    debt.min_payment_formula == "apple_card"
-                    and debt.balance_subject_to_interest == 0
-                ):
-                    debt.grace_charges.append((ev.date, ev.amount))
-                else:
-                    debt.balance_subject_to_interest += ev.amount
+                INTEREST_METHODS[debt.interest_method].add_charge(
+                    debt, ev.amount, ev.date
+                )
 
                 # Recompute the minimum payment after the additional charge
                 new_min = compute_min_payment(debt, current_date)
@@ -532,91 +532,71 @@ def daily_avalanche_schedule(
                         }
                     )
 
-        # Accrue daily interest on balances subject to interest
+        # Accrue daily interest and handle any due-date conversions
         for debt in debts:
-            if debt.balance_subject_to_interest > 0 and debt.apr > 0:
-                interest = (
-                    debt.balance_subject_to_interest * debt.apr / Decimal("36500")
-                )
-                debt.interest_buffer += interest
-                debt.interest_accrued += interest
-
-        # Convert unpaid grace charges to interest-bearing balances at due date
-        for debt in debts:
-            if debt.due_date and current_date == debt.due_date:
-                if debt.grace_charges:
-                    for ch_date, amt in debt.grace_charges:
-                        days = (current_date - ch_date).days + 1
-                        retro = amt * debt.apr / Decimal("36500") * days
-                        debt.interest_buffer += retro
-                        debt.interest_accrued += retro
-                        debt.balance_subject_to_interest += amt
-                    debt.grace_charges.clear()
-                debt.due_date = _add_month(debt.due_date)
+            INTEREST_METHODS[debt.interest_method].daily(debt, current_date)
 
         next_day = current_date + timedelta(days=1)
         if next_day.month != current_date.month:
             for debt in debts:
-                if debt.interest_buffer > 0:
-                    interest_billed = debt.interest_buffer.quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                    if interest_billed > 0:
-                        debt.balance += interest_billed
-                        debt.interest_charges += interest_billed
-                        debt.min_payment_args["interest_billed"] = interest_billed
+                interest_billed = INTEREST_METHODS[debt.interest_method].month_end(
+                    debt, current_date
+                )
+                if interest_billed > 0:
+                    debt.balance += interest_billed
+                    debt.interest_charges += interest_billed
+                    debt.min_payment_args["interest_billed"] = interest_billed
 
-                        new_min = compute_min_payment(debt, current_date)
-                        if debt.due_date is not None and new_min > 0:
-                            debt.minimum_payment = new_min
-                            next_due = debt.due_date
-                            while next_due <= current_date:
-                                next_due = _add_month(next_due)
-                            inserted = False
-                            for j in range(i, len(events)):
-                                future_ev = events[j]
-                                if (
-                                    future_ev.date == next_due
-                                    and future_ev.type == "debt_min"
-                                    and (future_ev.debt or future_ev.name) == debt.name
-                                ):
-                                    future_ev.amount = new_min
-                                    inserted = True
-                                    break
-                                if future_ev.date > next_due:
-                                    events.insert(
-                                        j,
-                                        Event(
-                                            date=next_due,
-                                            type="debt_min",
-                                            amount=new_min,
-                                            name=debt.name,
-                                            debt=debt.name,
-                                        ),
-                                    )
-                                    inserted = True
-                                    break
-                            if not inserted:
-                                events.append(
+                    new_min = compute_min_payment(debt, current_date)
+                    if debt.due_date is not None and new_min > 0:
+                        debt.minimum_payment = new_min
+                        next_due = debt.due_date
+                        while next_due <= current_date:
+                            next_due = _add_month(next_due)
+                        inserted = False
+                        for j in range(i, len(events)):
+                            future_ev = events[j]
+                            if (
+                                future_ev.date == next_due
+                                and future_ev.type == "debt_min"
+                                and (future_ev.debt or future_ev.name) == debt.name
+                            ):
+                                future_ev.amount = new_min
+                                inserted = True
+                                break
+                            if future_ev.date > next_due:
+                                events.insert(
+                                    j,
                                     Event(
                                         date=next_due,
                                         type="debt_min",
                                         amount=new_min,
                                         name=debt.name,
                                         debt=debt.name,
-                                    )
+                                    ),
                                 )
+                                inserted = True
+                                break
+                        if not inserted:
+                            events.append(
+                                Event(
+                                    date=next_due,
+                                    type="debt_min",
+                                    amount=new_min,
+                                    name=debt.name,
+                                    debt=debt.name,
+                                )
+                            )
 
-                        schedule.append(
-                            {
-                                "date": current_date,
-                                "type": "debt_add",
-                                "description": f"{debt.name} interest",
-                                "amount": interest_billed,
-                                "balance": balance,
-                            }
-                        )
-                    debt.interest_buffer = Decimal("0")
+                    schedule.append(
+                        {
+                            "date": current_date,
+                            "type": "debt_add",
+                            "description": f"{debt.name} interest",
+                            "amount": interest_billed,
+                            "balance": balance,
+                        }
+                    )
 
         if debug and debt_log is not None:
             debt_log.append(

@@ -25,6 +25,7 @@ def test_apple_card_interest_no_compounding(monkeypatch):
             "apr": 24.0,
             "minimum_payment": 0.0,
             "min_payment_formula": "apple_card",
+            "interest_method": "apple_card",
         }
     ]
 

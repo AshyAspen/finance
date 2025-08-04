@@ -98,7 +98,8 @@
       "minimum_payment": 20.0,
       "apr": 23.24,
       "due_date": "2025-07-25",
-      "min_payment_formula": "credit_card"
+      "min_payment_formula": "credit_card",
+      "interest_method": "credit_card"
     },
     {
       "name": "Apple Card",
@@ -107,6 +108,7 @@
       "apr": 26.24,
       "due_date": "2025-08-11",
       "min_payment_formula": "apple_card",
+      "interest_method": "apple_card",
       "unpaid_daily_cash": 0,
       "interest_billed": 0,
       "past_due": 0,

@@ -36,6 +36,7 @@ def test_installment_and_interest_added_and_min_payment():
             "apr": 24.0,
             "due_date": due_date.isoformat(),
             "min_payment_formula": "apple_card",
+            "interest_method": "apple_card",
             "unpaid_daily_cash": 0,
             "interest_billed": 0,
             "past_due": 0,
