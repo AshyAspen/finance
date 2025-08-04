@@ -184,6 +184,7 @@ def daily_avalanche_schedule(
 
     start = date.today()
     end = start + timedelta(days=days)
+    lookahead_end = max(end, start + timedelta(days=365))
 
     # Prepare debt objects for tracking balances and APRs
     debts: List[Debt] = [
@@ -198,7 +199,7 @@ def daily_avalanche_schedule(
     ]
     debt_lookup = {d.name: d for d in debts}
 
-    events = _build_events(paychecks, bills, debts, start, end)
+    events = _build_events(paychecks, bills, debts, start, lookahead_end)
 
     schedule: List[dict] = []
 
