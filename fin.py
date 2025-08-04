@@ -20,9 +20,13 @@ def main() -> None:
     bills = data.get("bills", [])
     debts = data.get("debts", [])
 
-    schedule, debts_after = daily_avalanche_schedule(
-        start_balance, paychecks, bills, debts, days=days
-    )
+    try:
+        schedule, debts_after = daily_avalanche_schedule(
+            start_balance, paychecks, bills, debts, days=days
+        )
+    except ValueError as exc:
+        print(f"Warning: {exc}")
+        return
 
     # Summarize events by date
     daily = defaultdict(
