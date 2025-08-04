@@ -27,6 +27,7 @@ def test_debt_add_updates_min_payment_and_reserves_cash():
             "apr": 0.0,
             "minimum_payment": 1.0,
             "due_date": (today + timedelta(days=10)).isoformat(),
+            "min_payment_formula": "credit_card",
         }
     ]
 

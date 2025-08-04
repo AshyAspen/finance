@@ -11,13 +11,14 @@ calculated by ``cash_flow.max_safe_payment``) is directed to the highest-APR
 debt, and interest is accrued on all outstanding debts at the end of the day.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
 from cash_flow import projected_min_balance
+from minimum_payments import FORMULAS
 
 
 @dataclass
@@ -42,6 +43,8 @@ class Debt:
     due_date: Optional[date] = None
     paid_off_date: Optional[date] = None
     interest_accrued: Decimal = Decimal("0")
+    min_payment_formula: Optional[str] = None
+    min_payment_args: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -183,25 +186,18 @@ def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
 
 
 def compute_min_payment(debt: Debt, as_of: date) -> Decimal:
-    """Return an estimated minimum payment for ``debt``.
+    """Return the minimum payment for ``debt`` based on configured formulas."""
 
-    The estimate is based on 1% of the projected balance at the next due date
-    plus one month's interest. When projecting the balance we accrue daily
-    interest from ``as_of`` until the upcoming due date so that callers reserve
-    enough cash for the payment.
-    """
+    if debt.min_payment_formula:
+        try:
+            formula = FORMULAS[debt.min_payment_formula]
+        except KeyError:  # pragma: no cover - defensive branch
+            raise ValueError(
+                f"Unknown minimum payment formula: {debt.min_payment_formula}"
+            )
+        return formula(debt, as_of)
 
-    balance = debt.balance
-    if debt.due_date and debt.apr > 0:
-        next_due = debt.due_date
-        while next_due <= as_of:
-            next_due = _add_month(next_due)
-        days = (next_due - as_of).days
-        if days > 0:
-            balance += balance * debt.apr / Decimal("36500") * days
-
-    base = balance * (debt.apr / Decimal("1200") + Decimal("0.01"))
-    return base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return debt.minimum_payment
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +264,20 @@ def daily_avalanche_schedule(
             apr=Decimal(str(d["apr"])),
             minimum_payment=Decimal(str(d.get("minimum_payment", 0))),
             due_date=_parse_date(d["due_date"]) if d.get("due_date") else None,
+            min_payment_formula=d.get("min_payment_formula"),
+            min_payment_args={
+                k: Decimal(str(v))
+                for k, v in d.items()
+                if k
+                not in {
+                    "name",
+                    "balance",
+                    "apr",
+                    "minimum_payment",
+                    "due_date",
+                    "min_payment_formula",
+                }
+            },
         )
         for d in debts_input
     ]
@@ -422,6 +432,8 @@ def daily_avalanche_schedule(
                     apr=debt_lookup[fev.debt].apr,
                     minimum_payment=Decimal("0"),
                     due_date=debt_lookup[fev.debt].due_date,
+                    min_payment_formula=debt_lookup[fev.debt].min_payment_formula,
+                    min_payment_args=debt_lookup[fev.debt].min_payment_args,
                 )
                 pending_min[fev.debt] = compute_min_payment(temp_debt, fev.date)
                 continue
