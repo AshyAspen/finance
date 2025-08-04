@@ -72,7 +72,7 @@ def _advance_paycheck(current: date, freq: str, first_day: int) -> date:
         return current + timedelta(weeks=2)
     if freq == "semi-monthly":
         second_day = min(first_day + 15, monthrange(current.year, current.month)[1])
-        if current.day == first_day:
+        if current.day == first_day and second_day != first_day:
             return current.replace(day=second_day)
         next_month = _add_month(current.replace(day=1))
         return next_month.replace(
@@ -238,13 +238,18 @@ def daily_avalanche_schedule(
     current_date = start
     i = 0
     while current_date <= end:
-        todays: List[Event] = []
+        paychecks_today: List[Event] = []
+        others_today: List[Event] = []
         while i < len(events) and events[i].date == current_date:
-            todays.append(events[i])
+            ev = events[i]
+            if ev.type == "paycheck":
+                paychecks_today.append(ev)
+            else:
+                others_today.append(ev)
             i += 1
 
         # Process income first
-        for ev in [e for e in todays if e.type == "paycheck"]:
+        for ev in paychecks_today:
             balance += ev.amount
             schedule.append(
                 {
@@ -257,7 +262,7 @@ def daily_avalanche_schedule(
             )
 
         # Then pay bills or minimum debt payments for the day
-        for ev in [e for e in todays if e.type != "paycheck"]:
+        for ev in others_today:
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount

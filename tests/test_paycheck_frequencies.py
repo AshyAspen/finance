@@ -47,3 +47,21 @@ def test_semi_monthly_paychecks():
     fourth = next_month.replace(day=min(first_day + 15, monthrange(next_month.year, next_month.month)[1]))
     expected = [today, second, third, fourth]
     assert pay_dates[:4] == expected
+
+
+def test_semi_monthly_paychecks_end_of_month():
+    today = date.today()
+    start_day = date(today.year - 1, 1, 31)
+    paychecks = [
+        {"amount": 100, "date": start_day.isoformat(), "frequency": "semi-monthly"}
+    ]
+    schedule, _, _ = daily_avalanche_schedule(0, paychecks, [], [], days=95)
+    pay_dates = [ev["date"] for ev in schedule if ev["type"] == "paycheck"]
+
+    m1_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
+    next_month = _add_month(date(today.year, today.month, 1))
+    m2_end = date(next_month.year, next_month.month, monthrange(next_month.year, next_month.month)[1])
+    next_month2 = _add_month(next_month)
+    m3_end = date(next_month2.year, next_month2.month, monthrange(next_month2.year, next_month2.month)[1])
+    expected = [m1_end, m2_end, m3_end]
+    assert pay_dates[:3] == expected
