@@ -8,7 +8,7 @@ each event are included—any dates before the start are treated as already
 paid. On each day income is applied first, then any bill or minimum debt
 payment due that day is paid. Remaining cash that can safely be used (as
 calculated by ``cash_flow.max_safe_payment``) is directed to the highest-APR
-debt.
+debt, and interest is accrued on all outstanding debts at the end of the day.
 """
 
 from dataclasses import dataclass
@@ -199,9 +199,9 @@ def daily_avalanche_schedule(
 
     schedule: List[dict] = []
 
+    current_date = start
     i = 0
-    while i < len(events):
-        current_date = events[i].date
+    while current_date <= end:
         todays: List[Event] = []
         while i < len(events) and events[i].date == current_date:
             todays.append(events[i])
@@ -271,6 +271,14 @@ def daily_avalanche_schedule(
                             "balance": balance,
                         }
                     )
+
+        # Accrue daily interest on all debts at end of day
+        for debt in debts:
+            if debt.balance > 0 and debt.apr > 0:
+                interest = debt.balance * debt.apr / Decimal("36500")
+                debt.balance += interest
+
+        current_date += timedelta(days=1)
 
     return schedule, [
         {
