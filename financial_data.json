@@ -1,0 +1,67 @@
+{
+  "paychecks": [
+    {
+      "name": "Paycheck",
+      "amount": 1100.00,
+      "date": "2025-07-29",
+      "frequency": "biweekly"
+    }
+  ],
+  "bills": [
+    {"name": "Rent", "amount": 200.00, "date": "2025-07-01"},
+    {"name": "Student Loan", "amount": 184.86, "date": "2025-07-05"},
+    {"name": "Car Insurance", "amount": 206.33, "date": "2025-07-10"},
+    {"name": "iCloud", "amount": 9.99, "date": "2025-07-15"},
+    {"name": "Copilot", "amount": 13.00, "date": "2025-07-20"},
+    {"name": "HP Instant Ink", "amount": 8.43, "date": "2025-07-25"},
+    {"name": "ChatGPT", "amount": 20.00, "date": "2025-08-01"},
+    {"name": "Gas", "amount": 150.00, "date": "2025-08-05"},
+    {"name": "Food", "amount": 200.00, "date": "2025-08-10"},
+    {"name": "Medications", "amount": 50.97, "date": "2025-08-15"},
+    {"name": "Tests", "amount": 20.53, "date": "2025-08-20"}
+  ],
+  "debts": [
+    {
+      "name": "iPhone Installment",
+      "balance": 919.44,
+      "minimum_payment": 54.08,
+      "apr": 0.0,
+      "due_date": "2025-07-28"
+    },
+    {
+      "name": "Patient Fi Loan",
+      "balance": 1555.00,
+      "minimum_payment": 64.80,
+      "apr": 0.0,
+      "due_date": "2025-08-02"
+    },
+    {
+      "name": "Citi Card",
+      "balance": 1925.00,
+      "minimum_payment": 20.00,
+      "apr": 23.24,
+      "due_date": "2025-07-25"
+    },
+    {
+      "name": "Apple Card",
+      "balance": 4145.93,
+      "minimum_payment": 119.00,
+      "apr": 26.24,
+      "due_date": "2025-08-07"
+    },
+    {
+      "name": "Alpheon Loan",
+      "balance": 5195.00,
+      "minimum_payment": 153.00,
+      "apr": 0.0,
+      "due_date": "2025-08-15"
+    },
+    {
+      "name": "Auto Loan",
+      "balance": 25970.64,
+      "minimum_payment": 463.11,
+      "apr": 8.5,
+      "due_date": "2025-08-20"
+    }
+  ]
+}
