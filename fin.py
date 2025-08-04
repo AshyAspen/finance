@@ -200,8 +200,12 @@ def edit_debts(data: Dict) -> None:
 # Simulation
 
 
-def run_simulation(data: Dict) -> None:
-    """Run the avalanche debt payoff simulation."""
+def run_simulation(data: Dict, debug: bool = False) -> None:
+    """Run the avalanche debt payoff simulation.
+
+    When ``debug`` is True the simulation continues even if the balance would
+    become negative and the user may optionally log daily debt balances.
+    """
     print("---  Debt Avalanche Forecaster ---")
     days_str = input("Enter number of days to simulate [60]: ").strip()
     days = int(days_str) if days_str else 60
@@ -213,38 +217,53 @@ def run_simulation(data: Dict) -> None:
 
     debt_log = None
 
-    try:
-        schedule, debts_after, negative_hit = daily_avalanche_schedule(
-            start_balance, paychecks, bills, debts, days=days
-        )
-    except ValueError as exc:
-        print(f"Warning: {exc}")
-        resp = input("Run in debug mode to inspect the shortfall? [y/N]: ").strip().lower()
-        if resp != "y":
-            return
-        import re
-        from datetime import datetime, date
-
-        m = re.search(r"on (\d{4}-\d{2}-\d{2})", str(exc))
-        if not m:
-            print("Unable to determine shortfall date.")
-            return
-        err_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
-        extra_days = (err_date - date.today()).days + 30
-        log_resp = input(
-            "Log debt balances each day? [y/N]: "
-        ).strip().lower()
+    if debug:
+        log_resp = input("Log debt balances each day? [y/N]: ").strip().lower()
         debt_log = [] if log_resp == "y" else None
         schedule, debts_after, negative_hit = daily_avalanche_schedule(
             start_balance,
             paychecks,
             bills,
             debts,
-            days=extra_days,
+            days=days,
             debug=True,
             debt_log=debt_log,
         )
-        days = extra_days
+    else:
+        try:
+            schedule, debts_after, negative_hit = daily_avalanche_schedule(
+                start_balance, paychecks, bills, debts, days=days
+            )
+        except ValueError as exc:
+            print(f"Warning: {exc}")
+            resp = input(
+                "Run in debug mode to inspect the shortfall? [y/N]: "
+            ).strip().lower()
+            if resp != "y":
+                return
+            import re
+            from datetime import datetime, date
+
+            m = re.search(r"on (\d{4}-\d{2}-\d{2})", str(exc))
+            if not m:
+                print("Unable to determine shortfall date.")
+                return
+            err_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+            extra_days = (err_date - date.today()).days + 30
+            log_resp = input(
+                "Log debt balances each day? [y/N]: "
+            ).strip().lower()
+            debt_log = [] if log_resp == "y" else None
+            schedule, debts_after, negative_hit = daily_avalanche_schedule(
+                start_balance,
+                paychecks,
+                bills,
+                debts,
+                days=extra_days,
+                debug=True,
+                debt_log=debt_log,
+            )
+            days = extra_days
 
     # Summarize events by date
     daily = defaultdict(
@@ -321,7 +340,8 @@ def main() -> None:
         print("2. Edit bills")
         print("3. Edit debts")
         print("4. Run simulation")
-        print("5. Quit")
+        print("5. Run debug simulation")
+        print("6. Quit")
         choice = input("Select an option: ").strip()
         if choice == "1":
             edit_paychecks(data)
@@ -332,6 +352,8 @@ def main() -> None:
         elif choice == "4":
             run_simulation(data)
         elif choice == "5":
+            run_simulation(data, debug=True)
+        elif choice == "6":
             break
         else:
             print("Invalid option.")
