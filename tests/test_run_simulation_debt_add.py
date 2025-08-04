@@ -39,7 +39,7 @@ def test_run_simulation_handles_debt_add(monkeypatch, capsys):
     assert "Debt additions" in output
     assert "Purchase $25.00" in output
 
-    schedule, _ = daily_avalanche_schedule(
+    schedule, _, _ = daily_avalanche_schedule(
         0, [], data["bills"], data["debts"], days=1
     )
     assert schedule[0]["amount"] == 25

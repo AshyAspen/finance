@@ -177,7 +177,8 @@ def daily_avalanche_schedule(
     bills: Iterable[dict],
     debts_input: Iterable[dict],
     days: int = 60,
-) -> Tuple[List[dict], List[dict]]:
+    debug: bool = False,
+) -> Tuple[List[dict], List[dict], Optional[date]]:
     """Return scheduled transactions and final debt balances using the avalanche method.
 
     Parameters
@@ -194,15 +195,20 @@ def daily_avalanche_schedule(
         ``apr``, ``minimum_payment`` and ``due_date``.
     Returns
     -------
-    Tuple[List[dict], List[dict]]
-        ``schedule`` of transactions and a list of ``debts`` with updated balances and
+    Tuple[List[dict], List[dict], Optional[date]]
+        ``schedule`` of transactions, a list of ``debts`` with updated balances and
         either a ``next_due_date`` for outstanding debts or a ``paid_off_date`` for debts
-        that have been fully repaid.
+        that have been fully repaid, and ``negative_date`` which is the first date the
+        balance dropped below zero when ``debug`` is enabled.
 
     Raises
     ------
     ValueError
         If projected cash flow indicates the balance will drop below zero.
+
+    When ``debug`` is True the schedule continues even if the balance would
+    become negative and the first date the balance drops below zero is
+    returned as ``negative_date``.
     """
 
     balance = Decimal(str(starting_balance))
@@ -227,6 +233,7 @@ def daily_avalanche_schedule(
     events = _build_events(paychecks, bills, debts, start, lookahead_end)
 
     schedule: List[dict] = []
+    negative_hit: Optional[date] = None
 
     current_date = start
     i = 0
@@ -276,9 +283,12 @@ def daily_avalanche_schedule(
                     debt.paid_off_date = ev.date
             balance -= payment_amount
             if balance < 0:
-                raise ValueError(
-                    f"Balance would go negative on {ev.date}"  # pragma: no cover - string only
-                )
+                if not debug:
+                    raise ValueError(
+                        f"Balance would go negative on {ev.date}"  # pragma: no cover - string only
+                    )
+                if negative_hit is None:
+                    negative_hit = ev.date
             schedule.append(
                 {
                     "date": ev.date,
@@ -310,9 +320,12 @@ def daily_avalanche_schedule(
             balance, future_bills, future_incomes
         )
         if negative_date is not None and negative_date <= end:
-            raise ValueError(
-                f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
-            )
+            if not debug:
+                raise ValueError(
+                    f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
+                )
+            if negative_hit is None:
+                negative_hit = negative_date
         safe = max(Decimal("0"), min_balance)
 
         if safe > 0:
@@ -353,5 +366,5 @@ def daily_avalanche_schedule(
             "paid_off_date": d.paid_off_date,
         }
         for d in debts
-    ]
+    ], negative_hit
 

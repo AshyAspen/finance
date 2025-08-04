@@ -11,7 +11,7 @@ from avalanche import daily_avalanche_schedule
 
 def test_daily_interest_accrual():
     debts = [{"name": "Loan", "balance": 1000.0, "apr": 36.5, "minimum_payment": 0.0}]
-    schedule, after = daily_avalanche_schedule(0, [], [], debts, days=2)
+    schedule, after, _ = daily_avalanche_schedule(0, [], [], debts, days=2)
     loan_balance = next(d["balance"] for d in after if d["name"] == "Loan")
 
     rate = Decimal("36.5") / Decimal("36500")

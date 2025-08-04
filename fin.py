@@ -212,12 +212,27 @@ def run_simulation(data: Dict) -> None:
     debts = data.get("debts", [])
 
     try:
-        schedule, debts_after = daily_avalanche_schedule(
+        schedule, debts_after, negative_hit = daily_avalanche_schedule(
             start_balance, paychecks, bills, debts, days=days
         )
     except ValueError as exc:
         print(f"Warning: {exc}")
-        return
+        resp = input("Run in debug mode to inspect the shortfall? [y/N]: ").strip().lower()
+        if resp != "y":
+            return
+        import re
+        from datetime import datetime, date
+
+        m = re.search(r"on (\d{4}-\d{2}-\d{2})", str(exc))
+        if not m:
+            print("Unable to determine shortfall date.")
+            return
+        err_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        extra_days = (err_date - date.today()).days + 30
+        schedule, debts_after, negative_hit = daily_avalanche_schedule(
+            start_balance, paychecks, bills, debts, days=extra_days, debug=True
+        )
+        days = extra_days
 
     # Summarize events by date
     daily = defaultdict(
@@ -242,8 +257,9 @@ def run_simulation(data: Dict) -> None:
 
     for day in sorted(daily):
         d = daily[day]
+        marker = " <<< LOW BALANCE" if negative_hit and day == negative_hit else ""
         print(
-            f"{day}: balance=${d['balance']:.2f} "
+            f"{day}: balance=${d['balance']:.2f}{marker} "
             f"(income=${d['paycheck']:.2f}, bills=${-d['bill']:.2f}, "
             f"minimums=${-d['debt_min']:.2f}, extra=${-d['extra']:.2f})"
         )
