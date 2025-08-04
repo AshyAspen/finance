@@ -316,15 +316,18 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
 
     print(f"\nRemaining debt balances after {days} days:")
     for d in debts_after:
+        interest = d.get("interest_accrued", Decimal("0"))
         paid = d.get("paid_off_date")
         if paid:
             print(
-                f"  {d['name']}: ${d['balance']:.2f} (paid off {paid.isoformat()})"
+                f"  {d['name']}: ${d['balance']:.2f} (paid off {paid.isoformat()}, total interest ${interest:.2f})",
             )
         else:
             due = d.get("next_due_date")
             due_str = due.isoformat() if due else "N/A"
-            print(f"  {d['name']}: ${d['balance']:.2f} (next due {due_str})")
+            print(
+                f"  {d['name']}: ${d['balance']:.2f} (next due {due_str}, total interest ${interest:.2f})",
+            )
 
 
 # ---------------------------------------------------------------------------

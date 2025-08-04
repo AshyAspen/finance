@@ -12,7 +12,9 @@ from avalanche import daily_avalanche_schedule
 def test_daily_interest_accrual():
     debts = [{"name": "Loan", "balance": 1000.0, "apr": 36.5, "minimum_payment": 0.0}]
     schedule, after, _ = daily_avalanche_schedule(0, [], [], debts, days=2)
-    loan_balance = next(d["balance"] for d in after if d["name"] == "Loan")
+    loan_info = next(d for d in after if d["name"] == "Loan")
+    loan_balance = loan_info["balance"]
+    interest = loan_info["interest_accrued"]
 
     rate = Decimal("36.5") / Decimal("36500")
     expected = Decimal("1000")
@@ -20,3 +22,5 @@ def test_daily_interest_accrual():
         expected += expected * rate
     precision = Decimal("0.000001")
     assert loan_balance.quantize(precision) == expected.quantize(precision)
+    expected_interest = expected - Decimal("1000")
+    assert interest.quantize(precision) == expected_interest.quantize(precision)
