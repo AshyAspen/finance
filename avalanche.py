@@ -178,6 +178,7 @@ def daily_avalanche_schedule(
     debts_input: Iterable[dict],
     days: int = 60,
     debug: bool = False,
+    debt_log: Optional[List[dict]] = None,
 ) -> Tuple[List[dict], List[dict], Optional[date]]:
     """Return scheduled transactions and final debt balances using the avalanche method.
 
@@ -192,7 +193,11 @@ def daily_avalanche_schedule(
         bills.
     debts_input:
         Iterable of dictionaries describing debts with keys ``name``, ``balance``,
-        ``apr``, ``minimum_payment`` and ``due_date``.
+        ``apr`", ``minimum_payment`` and ``due_date``.
+    debt_log:
+        Optional list that will be populated with daily snapshots of the account
+        balance and each debt's balance when ``debug`` is True. Each entry will
+        have keys ``date``, ``balance`` and ``debts``.
     Returns
     -------
     Tuple[List[dict], List[dict], Optional[date]]
@@ -353,6 +358,15 @@ def daily_avalanche_schedule(
             if debt.balance > 0 and debt.apr > 0:
                 interest = debt.balance * debt.apr / Decimal("36500")
                 debt.balance += interest
+
+        if debug and debt_log is not None:
+            debt_log.append(
+                {
+                    "date": current_date,
+                    "balance": balance,
+                    "debts": {d.name: d.balance for d in debts},
+                }
+            )
 
         current_date += timedelta(days=1)
 

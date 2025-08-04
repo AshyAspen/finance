@@ -211,6 +211,8 @@ def run_simulation(data: Dict) -> None:
     bills = data.get("bills", [])
     debts = data.get("debts", [])
 
+    debt_log = None
+
     try:
         schedule, debts_after, negative_hit = daily_avalanche_schedule(
             start_balance, paychecks, bills, debts, days=days
@@ -229,8 +231,18 @@ def run_simulation(data: Dict) -> None:
             return
         err_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
         extra_days = (err_date - date.today()).days + 30
+        log_resp = input(
+            "Log debt balances each day? [y/N]: "
+        ).strip().lower()
+        debt_log = [] if log_resp == "y" else None
         schedule, debts_after, negative_hit = daily_avalanche_schedule(
-            start_balance, paychecks, bills, debts, days=extra_days, debug=True
+            start_balance,
+            paychecks,
+            bills,
+            debts,
+            days=extra_days,
+            debug=True,
+            debt_log=debt_log,
         )
         days = extra_days
 
@@ -255,14 +267,19 @@ def run_simulation(data: Dict) -> None:
         d["names"][ev["type"]].append((ev["description"], ev["amount"]))
         d["balance"] = ev["balance"]
 
+    debt_map = {entry["date"]: entry["debts"] for entry in debt_log} if debt_log else {}
+
     for day in sorted(daily):
         d = daily[day]
         marker = " <<< LOW BALANCE" if negative_hit and day == negative_hit else ""
-        print(
-            f"{day}: balance=${d['balance']:.2f}{marker} "
-            f"(income=${d['paycheck']:.2f}, bills=${-d['bill']:.2f}, "
-            f"minimums=${-d['debt_min']:.2f}, extra=${-d['extra']:.2f})"
-        )
+        line = f"{day}: balance=${d['balance']:.2f}{marker}"
+        if debt_map:
+            debts_str = ", ".join(
+                f"{name}=${bal:.2f}" for name, bal in debt_map.get(day, {}).items()
+            )
+            if debts_str:
+                line += f" | debts: {debts_str}"
+        print(line)
         for cat in ["paycheck", "bill", "debt_min", "extra", "debt_add"]:
             if d["names"][cat]:
                 items = ", ".join(
