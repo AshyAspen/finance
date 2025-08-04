@@ -2,24 +2,81 @@
   "paychecks": [
     {
       "name": "Paycheck",
-      "amount": 1100.00,
+      "amount": 1100.0,
       "date": "2025-07-29",
       "frequency": "biweekly"
     }
   ],
   "bills": [
-    {"name": "Rent", "amount": 200.00, "date": "2025-07-01"},
-    {"name": "Student Loan", "amount": 184.86, "date": "2025-07-01"},
-    {"name": "ChatGPT", "amount": 20.00, "date": "2025-08-01"},
-    {"name": "iCloud", "amount": 9.99, "date": "2025-07-01"},
-    {"name": "Car Insurance", "amount": 206.33, "date": "2025-07-10"},
-    {"name": "Cellular", "amount": 35.00, "date": "2025-07-04"},
-    {"name": "HP Instant Ink", "amount": 8.43, "date": "2025-07-08"},
-    {"name": "Copilot", "amount": 13.00, "date": "2025-07-20"},
-    {"name": "Gas", "amount": 150.00, "date": "2025-08-05"},
-    {"name": "Food", "amount": 200.00, "date": "2025-08-05"},
-    {"name": "Medications", "amount": 50.97, "date": "2025-08-30"},
-    {"name": "Tests", "amount": 20.53, "date": "2025-08-30"}
+    {
+      "name": "Rent",
+      "amount": 200.0,
+      "date": "2025-07-01"
+    },
+    {
+      "name": "Student Loan",
+      "amount": 184.86,
+      "date": "2025-07-01"
+    },
+    {
+      "name": "ChatGPT",
+      "amount": 20.0,
+      "date": "2025-08-01",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "iCloud",
+      "amount": 9.99,
+      "date": "2025-07-01",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Car Insurance",
+      "amount": 206.33,
+      "date": "2025-07-10"
+    },
+    {
+      "name": "Cellular",
+      "amount": 35.0,
+      "date": "2025-07-04",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "HP Instant Ink",
+      "amount": 8.43,
+      "date": "2025-07-08",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Copilot",
+      "amount": 13.0,
+      "date": "2025-07-20",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Gas",
+      "amount": 150.0,
+      "date": "2025-08-05",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Food",
+      "amount": 200.0,
+      "date": "2025-08-05",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Medications",
+      "amount": 50.97,
+      "date": "2025-08-30",
+      "debt": "Apple Card"
+    },
+    {
+      "name": "Tests",
+      "amount": 20.53,
+      "date": "2025-08-30",
+      "debt": "Apple Card"
+    }
   ],
   "debts": [
     {
@@ -31,15 +88,15 @@
     },
     {
       "name": "Patient Fi Loan",
-      "balance": 1555.00,
-      "minimum_payment": 64.80,
+      "balance": 1555.0,
+      "minimum_payment": 64.8,
       "apr": 0.0,
       "due_date": "2025-08-02"
     },
     {
       "name": "Citi Card",
-      "balance": 1925.00,
-      "minimum_payment": 20.00,
+      "balance": 1925.0,
+      "minimum_payment": 20.0,
       "apr": 23.24,
       "due_date": "2025-07-25"
     },
@@ -52,8 +109,8 @@
     },
     {
       "name": "Alpheon Loan",
-      "balance": 5195.00,
-      "minimum_payment": 153.00,
+      "balance": 5195.0,
+      "minimum_payment": 153.0,
       "apr": 0.0,
       "due_date": "2025-08-15"
     },
