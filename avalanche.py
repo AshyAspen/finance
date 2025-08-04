@@ -43,6 +43,7 @@ class Debt:
     due_date: Optional[date] = None
     paid_off_date: Optional[date] = None
     interest_accrued: Decimal = Decimal("0")
+    interest_buffer: Decimal = Decimal("0")
     min_payment_formula: Optional[str] = None
     min_payment_args: dict = field(default_factory=dict)
 
@@ -481,12 +482,71 @@ def daily_avalanche_schedule(
                         }
                     )
 
-        # Accrue daily interest on all debts at end of day
+        # Accrue daily interest and apply it at month end
         for debt in debts:
             if debt.balance > 0 and debt.apr > 0:
                 interest = debt.balance * debt.apr / Decimal("36500")
-                debt.balance += interest
+                debt.interest_buffer += interest
                 debt.interest_accrued += interest
+
+        next_day = current_date + timedelta(days=1)
+        if next_day.month != current_date.month:
+            for debt in debts:
+                if debt.interest_buffer > 0:
+                    debt.balance += debt.interest_buffer
+                    debt.min_payment_args["interest_billed"] = debt.interest_buffer
+
+                    new_min = compute_min_payment(debt, current_date)
+                    if debt.due_date is not None and new_min > 0:
+                        debt.minimum_payment = new_min
+                        next_due = debt.due_date
+                        while next_due <= current_date:
+                            next_due = _add_month(next_due)
+                        inserted = False
+                        for j in range(i, len(events)):
+                            future_ev = events[j]
+                            if (
+                                future_ev.date == next_due
+                                and future_ev.type == "debt_min"
+                                and (future_ev.debt or future_ev.name) == debt.name
+                            ):
+                                future_ev.amount = new_min
+                                inserted = True
+                                break
+                            if future_ev.date > next_due:
+                                events.insert(
+                                    j,
+                                    Event(
+                                        date=next_due,
+                                        type="debt_min",
+                                        amount=new_min,
+                                        name=debt.name,
+                                        debt=debt.name,
+                                    ),
+                                )
+                                inserted = True
+                                break
+                        if not inserted:
+                            events.append(
+                                Event(
+                                    date=next_due,
+                                    type="debt_min",
+                                    amount=new_min,
+                                    name=debt.name,
+                                    debt=debt.name,
+                                )
+                            )
+
+                    schedule.append(
+                        {
+                            "date": current_date,
+                            "type": "debt_add",
+                            "description": f"{debt.name} interest",
+                            "amount": debt.interest_buffer,
+                            "balance": balance,
+                        }
+                    )
+                    debt.interest_buffer = Decimal("0")
 
         if debug and debt_log is not None:
             debt_log.append(

@@ -55,6 +55,9 @@ def apple_card(debt, as_of: date) -> Decimal:
     ``past_due`` – any past due amounts
     ``financing_balance`` – balance tied to financing plans (if any)
     ``installment_due`` – installment amount(s) due for financing plans
+    
+    The resulting minimum payment is the usual payment calculation plus any
+    billed interest, installment amounts, and past due totals.
     """
 
     args = getattr(debt, "min_payment_args", {})
@@ -67,12 +70,11 @@ def apple_card(debt, as_of: date) -> Decimal:
     total_balance = debt.balance
     regular_balance = total_balance - financing_balance
 
-    base = ((regular_balance - unpaid_daily_cash) * Decimal("0.01") +
-            unpaid_daily_cash + interest_billed)
+    base = ((regular_balance - unpaid_daily_cash) * Decimal("0.01") + unpaid_daily_cash)
     base = base.quantize(Decimal("1"), rounding=ROUND_UP)
     base = max(Decimal("25"), base)
 
-    payment = base + installment_due + past_due
+    payment = base + interest_billed + installment_due + past_due
     if total_balance < payment:
         payment = total_balance
     return payment

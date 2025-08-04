@@ -76,16 +76,15 @@
       "amount": 20.53,
       "date": "2025-08-30",
       "debt": "Apple Card"
+    },
+    {
+      "name": "iPhone Installment",
+      "amount": 54.08,
+      "date": "2025-07-31",
+      "debt": "Apple Card"
     }
   ],
   "debts": [
-    {
-      "name": "iPhone Installment",
-      "balance": 919.44,
-      "minimum_payment": 54.08,
-      "apr": 0.0,
-      "due_date": "2025-07-28"
-    },
     {
       "name": "Patient Fi Loan",
       "balance": 1555.0,
@@ -111,8 +110,7 @@
       "unpaid_daily_cash": 0,
       "interest_billed": 0,
       "past_due": 0,
-      "financing_balance": 0,
-      "installment_due": 0
+      "installment_due": 54.08
     },
     {
       "name": "Alpheon Loan",
