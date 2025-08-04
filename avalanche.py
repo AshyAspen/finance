@@ -41,6 +41,7 @@ class Debt:
     minimum_payment: Decimal
     due_date: Optional[date] = None
     paid_off_date: Optional[date] = None
+    interest_accrued: Decimal = Decimal("0")
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +459,7 @@ def daily_avalanche_schedule(
             if debt.balance > 0 and debt.apr > 0:
                 interest = debt.balance * debt.apr / Decimal("36500")
                 debt.balance += interest
+                debt.interest_accrued += interest
 
         if debug and debt_log is not None:
             debt_log.append(
@@ -474,6 +476,7 @@ def daily_avalanche_schedule(
         {
             "name": d.name,
             "balance": d.balance,
+            "interest_accrued": d.interest_accrued,
             "next_due_date": None
             if d.paid_off_date
             else _next_due_date(d.due_date, end),
