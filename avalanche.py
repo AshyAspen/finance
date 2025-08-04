@@ -257,21 +257,29 @@ def daily_avalanche_schedule(
 
         # Future events for safe-payment calculation
         future_events = events[i:]
-        future_bills = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in future_events
-            if ev.type != "paycheck"
-        ]
-        future_incomes = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in future_events
-            if ev.type == "paycheck"
-        ]
+        future_bills = []
+        future_incomes = []
+        for ev in future_events:
+            if ev.type == "paycheck":
+                future_incomes.append(
+                    {"amount": ev.amount, "date": ev.date.isoformat()}
+                )
+            elif ev.type == "debt_min":
+                debt = debt_lookup.get(ev.name)
+                if debt and debt.balance <= 0:
+                    continue
+                future_bills.append(
+                    {"amount": ev.amount, "date": ev.date.isoformat()}
+                )
+            else:
+                future_bills.append(
+                    {"amount": ev.amount, "date": ev.date.isoformat()}
+                )
 
         min_balance, negative_date = projected_min_balance(
             balance, future_bills, future_incomes
         )
-        if negative_date is not None:
+        if negative_date is not None and negative_date <= end:
             raise ValueError(
                 f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
             )

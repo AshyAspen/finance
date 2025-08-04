@@ -1,3 +1,5 @@
-run fin.py to begin
+Run ``fin.py`` to begin.
 
-income, bills, and debt data is stored in financial_data.json
+Income, bills, and debt data is stored in ``financial_data.json``.
+The program starts with a simple menu that lets you edit income,
+bills, or debts before running the debt avalanche simulation.
