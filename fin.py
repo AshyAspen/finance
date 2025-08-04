@@ -64,7 +64,7 @@ def edit_paychecks(data: Dict) -> None:
 def edit_bills(data: Dict) -> None:
     """Add or remove bill entries."""
     bills = data.setdefault("bills", [])
-    debt_names = {d["name"] for d in data.get("debts", [])}
+    debts = data.get("debts", [])
     while True:
         print("\nCurrent bills:")
         for i, b in enumerate(bills, 1):
@@ -76,14 +76,18 @@ def edit_bills(data: Dict) -> None:
             amount = float(input("Amount: ").strip())
             date = input("Due date (YYYY-MM-DD): ").strip()
             debt = None
-            while True:
-                debt_input = input("Associate with debt [none]: ").strip()
-                if not debt_input:
-                    break
-                if debt_input in debt_names:
-                    debt = debt_input
-                    break
-                print("Debt not found. Please try again.")
+            if debts:
+                while True:
+                    print("Associate with debt? (0 for none)")
+                    for i, d in enumerate(debts, 1):
+                        print(f"{i}. {d['name']}")
+                    choice = input("Debt number [0]: ").strip()
+                    if not choice or choice == "0":
+                        break
+                    if choice.isdigit() and 1 <= int(choice) <= len(debts):
+                        debt = debts[int(choice) - 1]["name"]
+                        break
+                    print("Invalid selection. Please try again.")
             bill = {"name": name, "amount": amount, "date": date}
             if debt:
                 bill["debt"] = debt
