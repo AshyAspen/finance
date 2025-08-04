@@ -25,9 +25,10 @@ class Event:
     """Represents a financial event."""
 
     date: date
-    type: str  # "paycheck", "bill", or "debt_min"
+    type: str  # "paycheck", "bill", "debt_min", or "debt_add"
     amount: Decimal
     name: str
+    debt: Optional[str] = None
 
 
 @dataclass
@@ -113,14 +114,25 @@ def _build_events(
         while current < start:
             current = _add_month(current)
         while current <= end:
-            events.append(
-                Event(
-                    date=current,
-                    type="bill",
-                    amount=Decimal(str(b["amount"])),
-                    name=b.get("name", "Bill"),
+            if "debt" in b:
+                events.append(
+                    Event(
+                        date=current,
+                        type="debt_add",
+                        amount=Decimal(str(b["amount"])),
+                        name=b.get("name", "Bill"),
+                        debt=b["debt"],
+                    )
                 )
-            )
+            else:
+                events.append(
+                    Event(
+                        date=current,
+                        type="bill",
+                        amount=Decimal(str(b["amount"])),
+                        name=b.get("name", "Bill"),
+                    )
+                )
             current = _add_month(current)
 
     # Minimum debt payments
@@ -131,7 +143,15 @@ def _build_events(
         while current < start:
             current = _add_month(current)
         while current <= end:
-            events.append(Event(current, "debt_min", d.minimum_payment, d.name))
+            events.append(
+                Event(
+                    current,
+                    "debt_min",
+                    d.minimum_payment,
+                    d.name,
+                    debt=d.name,
+                )
+            )
             current = _add_month(current)
 
     events.sort(key=lambda e: e.date)
@@ -231,9 +251,23 @@ def daily_avalanche_schedule(
 
         # Then pay bills or minimum debt payments for the day
         for ev in [e for e in todays if e.type != "paycheck"]:
+            if ev.type == "debt_add":
+                debt = debt_lookup[ev.debt]
+                debt.balance += ev.amount
+                schedule.append(
+                    {
+                        "date": ev.date,
+                        "type": ev.type,
+                        "description": ev.name,
+                        "amount": Decimal("0"),
+                        "balance": balance,
+                    }
+                )
+                continue
+
             payment_amount = ev.amount
             if ev.type == "debt_min":
-                debt = debt_lookup[ev.name]
+                debt = debt_lookup[ev.debt or ev.name]
                 payment_amount = min(ev.amount, debt.balance)
                 if payment_amount <= 0:
                     continue
@@ -260,7 +294,11 @@ def daily_avalanche_schedule(
         future_bills = [
             {"amount": ev.amount, "date": ev.date.isoformat()}
             for ev in future_events
-            if ev.type != "paycheck"
+            if ev.type not in {"paycheck", "debt_add"}
+            and (
+                ev.type != "debt_min"
+                or debt_lookup[(ev.debt or ev.name)].balance > 0
+            )
         ]
         future_incomes = [
             {"amount": ev.amount, "date": ev.date.isoformat()}
@@ -271,7 +309,7 @@ def daily_avalanche_schedule(
         min_balance, negative_date = projected_min_balance(
             balance, future_bills, future_incomes
         )
-        if negative_date is not None:
+        if negative_date is not None and negative_date <= end:
             raise ValueError(
                 f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
             )
