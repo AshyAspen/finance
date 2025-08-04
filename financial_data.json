@@ -9,16 +9,17 @@
   ],
   "bills": [
     {"name": "Rent", "amount": 200.00, "date": "2025-07-01"},
-    {"name": "Student Loan", "amount": 184.86, "date": "2025-07-05"},
-    {"name": "Car Insurance", "amount": 206.33, "date": "2025-07-10"},
-    {"name": "iCloud", "amount": 9.99, "date": "2025-07-15"},
-    {"name": "Copilot", "amount": 13.00, "date": "2025-07-20"},
-    {"name": "HP Instant Ink", "amount": 8.43, "date": "2025-07-25"},
+    {"name": "Student Loan", "amount": 184.86, "date": "2025-07-01"},
     {"name": "ChatGPT", "amount": 20.00, "date": "2025-08-01"},
+    {"name": "iCloud", "amount": 9.99, "date": "2025-07-01"},
+    {"name": "Car Insurance", "amount": 206.33, "date": "2025-07-10"},
+    {"name": "Cellular", "amount": 35.00, "date": "2025-07-04"},
+    {"name": "HP Instant Ink", "amount": 8.43, "date": "2025-07-08"},
+    {"name": "Copilot", "amount": 13.00, "date": "2025-07-20"},
     {"name": "Gas", "amount": 150.00, "date": "2025-08-05"},
-    {"name": "Food", "amount": 200.00, "date": "2025-08-10"},
-    {"name": "Medications", "amount": 50.97, "date": "2025-08-15"},
-    {"name": "Tests", "amount": 20.53, "date": "2025-08-20"}
+    {"name": "Food", "amount": 200.00, "date": "2025-08-05"},
+    {"name": "Medications", "amount": 50.97, "date": "2025-08-30"},
+    {"name": "Tests", "amount": 20.53, "date": "2025-08-30"}
   ],
   "debts": [
     {
@@ -45,9 +46,9 @@
     {
       "name": "Apple Card",
       "balance": 4145.93,
-      "minimum_payment": 119.00,
+      "minimum_payment": 173.08,
       "apr": 26.24,
-      "due_date": "2025-08-07"
+      "due_date": "2025-08-11"
     },
     {
       "name": "Alpheon Loan",
@@ -61,7 +62,7 @@
       "balance": 25970.64,
       "minimum_payment": 463.11,
       "apr": 8.5,
-      "due_date": "2025-08-20"
+      "due_date": "2025-08-01"
     }
   ]
 }
