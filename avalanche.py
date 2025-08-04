@@ -13,7 +13,7 @@ debt, and interest is accrued on all outstanding debts at the end of the day.
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
@@ -167,6 +167,19 @@ def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
     return current
 
 
+def compute_min_payment(debt: Debt) -> Decimal:
+    """Return an estimated minimum payment for ``debt``.
+
+    The calculation uses a simple heuristic of 1% of the current balance plus
+    one month's interest, rounded to the nearest cent. This matches typical
+    credit card minimum payment formulas and keeps the value consistent across
+    scheduling cycles.
+    """
+
+    base = debt.balance * (debt.apr / Decimal("1200") + Decimal("0.01"))
+    return base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 # ---------------------------------------------------------------------------
 # Core algorithm
 
@@ -271,6 +284,50 @@ def daily_avalanche_schedule(
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount
+
+                # Recompute the minimum payment after the additional charge
+                new_min = compute_min_payment(debt)
+                if debt.due_date is not None and new_min > 0:
+                    debt.minimum_payment = new_min
+                    next_due = debt.due_date
+                    while next_due <= current_date:
+                        next_due = _add_month(next_due)
+
+                    inserted = False
+                    for j in range(i, len(events)):
+                        future_ev = events[j]
+                        if (
+                            future_ev.date == next_due
+                            and future_ev.type == "debt_min"
+                            and (future_ev.debt or future_ev.name) == debt.name
+                        ):
+                            future_ev.amount = new_min
+                            inserted = True
+                            break
+                        if future_ev.date > next_due:
+                            events.insert(
+                                j,
+                                Event(
+                                    date=next_due,
+                                    type="debt_min",
+                                    amount=new_min,
+                                    name=debt.name,
+                                    debt=debt.name,
+                                ),
+                            )
+                            inserted = True
+                            break
+                    if not inserted:
+                        events.append(
+                            Event(
+                                date=next_due,
+                                type="debt_min",
+                                amount=new_min,
+                                name=debt.name,
+                                debt=debt.name,
+                            )
+                        )
+
                 schedule.append(
                     {
                         "date": ev.date,
@@ -311,20 +368,37 @@ def daily_avalanche_schedule(
 
         # Future events for safe-payment calculation
         future_events = events[i:]
-        future_bills = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in future_events
-            if ev.type not in {"paycheck", "debt_add"}
-            and (
-                ev.type != "debt_min"
-                or debt_lookup[(ev.debt or ev.name)].balance > 0
-            )
-        ]
-        future_incomes = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in future_events
-            if ev.type == "paycheck"
-        ]
+
+        # Build future bills and incomes while accounting for upcoming debt
+        # additions that will increase minimum payments before those payments
+        # are due.
+        future_bills: List[dict] = []
+        future_incomes: List[dict] = []
+        simulated_balances = {d.name: d.balance for d in debts}
+        pending_min: dict[str, Decimal] = {}
+        for fev in future_events:
+            if fev.type == "paycheck":
+                future_incomes.append({"amount": fev.amount, "date": fev.date.isoformat()})
+                continue
+            if fev.type == "debt_add":
+                simulated_balances[fev.debt] += fev.amount
+                temp_debt = Debt(
+                    name=fev.debt,
+                    balance=simulated_balances[fev.debt],
+                    apr=debt_lookup[fev.debt].apr,
+                    minimum_payment=Decimal("0"),
+                )
+                pending_min[fev.debt] = compute_min_payment(temp_debt)
+                continue
+            if fev.type == "debt_min":
+                name = fev.debt or fev.name
+                if simulated_balances[name] <= 0:
+                    continue
+                amount = pending_min.pop(name, fev.amount)
+                future_bills.append({"amount": amount, "date": fev.date.isoformat()})
+                simulated_balances[name] = max(Decimal("0"), simulated_balances[name] - amount)
+                continue
+            future_bills.append({"amount": fev.amount, "date": fev.date.isoformat()})
 
         min_balance, negative_date = projected_min_balance(
             balance, future_bills, future_incomes
