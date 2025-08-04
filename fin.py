@@ -163,6 +163,7 @@ def run_simulation(data: Dict) -> None:
             "bill": Decimal("0"),
             "debt_min": Decimal("0"),
             "extra": Decimal("0"),
+            "debt_add": Decimal("0"),
             "names": defaultdict(list),
             "balance": Decimal("0"),
         }
@@ -170,6 +171,8 @@ def run_simulation(data: Dict) -> None:
     for ev in schedule:
         day = ev["date"]
         d = daily[day]
+        if ev["type"] not in d:
+            d[ev["type"]] = Decimal("0")
         d[ev["type"]] += ev["amount"]
         d["names"][ev["type"]].append((ev["description"], ev["amount"]))
         d["balance"] = ev["balance"]
@@ -181,7 +184,7 @@ def run_simulation(data: Dict) -> None:
             f"(income=${d['paycheck']:.2f}, bills=${-d['bill']:.2f}, "
             f"minimums=${-d['debt_min']:.2f}, extra=${-d['extra']:.2f})"
         )
-        for cat in ["paycheck", "bill", "debt_min", "extra"]:
+        for cat in ["paycheck", "bill", "debt_min", "extra", "debt_add"]:
             if d["names"][cat]:
                 items = ", ".join(
                     f"{name} ${(-amt if amt < 0 else amt):.2f}"
@@ -192,6 +195,7 @@ def run_simulation(data: Dict) -> None:
                     "bill": "Bills",
                     "debt_min": "Debt minimums",
                     "extra": "Extra",
+                    "debt_add": "Debt additions",
                 }[cat]
                 print(f"  {label}: {items}")
 
