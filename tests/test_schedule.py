@@ -38,7 +38,7 @@ def test_balances_never_negative():
         },
     ]
 
-    schedule, _ = daily_avalanche_schedule(0, paychecks, bills, debts)
+    schedule, _, _ = daily_avalanche_schedule(0, paychecks, bills, debts)
 
     for event in schedule:
         assert event["balance"] >= 0, f"Negative balance {event['balance']} on {event['date']}"
@@ -56,7 +56,7 @@ def test_events_before_today_skipped():
     today = date.today()
     past = today.replace(day=1)
     bills = [{"amount": 100.0, "date": past.isoformat()}]
-    schedule, _ = daily_avalanche_schedule(1000, [], bills, [])
+    schedule, _, _ = daily_avalanche_schedule(1000, [], bills, [])
 
     expected = past
     while expected < today:

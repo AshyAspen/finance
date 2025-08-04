@@ -17,3 +17,17 @@ def test_negative_balance_raises():
 
     with pytest.raises(ValueError):
         daily_avalanche_schedule(50.0, [], bills, [], days=30)
+
+
+def test_debug_mode_continues():
+    today = date.today()
+    future_bill = today + timedelta(days=10)
+    future_paycheck = future_bill + timedelta(days=30)
+    bills = [{"amount": 100.0, "date": future_bill.isoformat()}]
+    paychecks = [{"amount": 10.0, "date": future_paycheck.isoformat()}]
+
+    schedule, _, negative_date = daily_avalanche_schedule(
+        50.0, paychecks, bills, [], days=40, debug=True
+    )
+    assert negative_date == future_bill
+    assert any(ev["date"] == future_paycheck for ev in schedule)

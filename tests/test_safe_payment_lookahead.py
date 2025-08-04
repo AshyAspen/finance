@@ -21,10 +21,10 @@ def test_schedule_independent_of_simulation_length():
         {"name": "Card", "balance": 500.0, "apr": 0.0, "minimum_payment": 0.0}
     ]
 
-    short_schedule, _ = daily_avalanche_schedule(
+    short_schedule, _, _ = daily_avalanche_schedule(
         1000.0, paychecks, bills, debts, days=30
     )
-    long_schedule, _ = daily_avalanche_schedule(
+    long_schedule, _, _ = daily_avalanche_schedule(
         1000.0, paychecks, bills, debts, days=60
     )
 

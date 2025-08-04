@@ -18,7 +18,7 @@ def test_bill_adds_to_debt_not_balance():
         {"name": "Card", "balance": 0.0, "apr": 0.0, "minimum_payment": 0.0}
     ]
 
-    schedule, after = daily_avalanche_schedule(0, [], bills, debts, days=30)
+    schedule, after, _ = daily_avalanche_schedule(0, [], bills, debts, days=30)
 
     assert schedule[0]["type"] == "debt_add"
     assert schedule[0]["balance"] == 0
