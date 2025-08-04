@@ -17,7 +17,7 @@ def load_data() -> Dict:
     if DATA_FILE.exists():
         with DATA_FILE.open() as f:
             return json.load(f)
-    return {"paychecks": [], "bills": [], "debts": []}
+    return {"paychecks": [], "bills": [], "debts": [], "goals": []}
 
 
 def save_data(data: Dict) -> None:
@@ -196,6 +196,52 @@ def edit_debts(data: Dict) -> None:
             break
 
 
+def edit_goals(data: Dict) -> None:
+    """Add, remove, or toggle goal entries (for wants and goals)."""
+    goals = data.setdefault("goals", [])
+    print("\nThis feature is for wants and goals.")
+    while True:
+        print("\nCurrent goals:")
+        for i, g in enumerate(goals, 1):
+            status = "enabled" if g.get("enabled", True) else "disabled"
+            print(
+                f"{i}. {g['name']} ${g['amount']} target {g['date']} ({status})"
+            )
+        action = input("A)dd, E)dit, D)elete, T)oggle, B)ack: ").strip().lower()
+        if action == "a":
+            name = input("Name: ").strip() or "Goal"
+            amount = float(input("Amount: ").strip())
+            date = input("Target date (YYYY-MM-DD): ").strip()
+            goals.append(
+                {"name": name, "amount": amount, "date": date, "enabled": True}
+            )
+            save_data(data)
+        elif action == "e":
+            idx = input("Number to edit: ").strip()
+            if idx.isdigit() and 1 <= int(idx) <= len(goals):
+                g = goals[int(idx) - 1]
+                name = input(f"Name [{g['name']}]: ").strip() or g['name']
+                amount = input(f"Amount [{g['amount']}]: ").strip()
+                date = input(
+                    f"Target date (YYYY-MM-DD) [{g['date']}]: "
+                ).strip() or g['date']
+                g.update({"name": name, "date": date})
+                if amount:
+                    g["amount"] = float(amount)
+                save_data(data)
+        elif action == "d":
+            _delete_item(goals)
+            save_data(data)
+        elif action == "t":
+            idx = input("Number to toggle: ").strip()
+            if idx.isdigit() and 1 <= int(idx) <= len(goals):
+                g = goals[int(idx) - 1]
+                g["enabled"] = not g.get("enabled", True)
+                save_data(data)
+        elif action == "b":
+            break
+
+
 # ---------------------------------------------------------------------------
 # Simulation
 
@@ -214,6 +260,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     paychecks = data.get("paychecks", [])
     bills = data.get("bills", [])
     debts = data.get("debts", [])
+    goals = [g for g in data.get("goals", []) if g.get("enabled", True)]
 
     debt_log = None
 
@@ -225,6 +272,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
             paychecks,
             bills,
             debts,
+            goals,
             days=days,
             debug=True,
             debt_log=debt_log,
@@ -232,7 +280,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     else:
         try:
             schedule, debts_after, negative_hit = daily_avalanche_schedule(
-                start_balance, paychecks, bills, debts, days=days
+                start_balance, paychecks, bills, debts, goals, days=days
             )
         except ValueError as exc:
             print(f"Warning: {exc}")
@@ -259,6 +307,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
                 paychecks,
                 bills,
                 debts,
+                goals,
                 days=extra_days,
                 debug=True,
                 debt_log=debt_log,
@@ -270,6 +319,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
         lambda: {
             "paycheck": Decimal("0"),
             "bill": Decimal("0"),
+            "goal": Decimal("0"),
             "debt_min": Decimal("0"),
             "extra": Decimal("0"),
             "debt_add": Decimal("0"),
@@ -299,7 +349,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
             if debts_str:
                 line += f" | debts: {debts_str}"
         print(line)
-        for cat in ["paycheck", "bill", "debt_min", "extra", "debt_add"]:
+        for cat in ["paycheck", "bill", "goal", "debt_min", "extra", "debt_add"]:
             if d["names"][cat]:
                 items = ", ".join(
                     f"{name} ${(-amt if amt < 0 else amt):.2f}"
@@ -308,6 +358,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
                 label = {
                     "paycheck": "Income",
                     "bill": "Bills",
+                    "goal": "Goals",
                     "debt_min": "Debt minimums",
                     "extra": "Extra",
                     "debt_add": "Debt additions",
@@ -342,9 +393,10 @@ def main() -> None:
         print("1. Edit income")
         print("2. Edit bills")
         print("3. Edit debts")
-        print("4. Run simulation")
-        print("5. Run debug simulation")
-        print("6. Quit")
+        print("4. Edit goals")
+        print("5. Run simulation")
+        print("6. Run debug simulation")
+        print("7. Quit")
         choice = input("Select an option: ").strip()
         if choice == "1":
             edit_paychecks(data)
@@ -353,10 +405,12 @@ def main() -> None:
         elif choice == "3":
             edit_debts(data)
         elif choice == "4":
-            run_simulation(data)
+            edit_goals(data)
         elif choice == "5":
-            run_simulation(data, debug=True)
+            run_simulation(data)
         elif choice == "6":
+            run_simulation(data, debug=True)
+        elif choice == "7":
             break
         else:
             print("Invalid option.")

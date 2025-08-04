@@ -72,3 +72,35 @@ def test_edit_debt(monkeypatch):
     assert d["minimum_payment"] == 15.0
     assert d["apr"] == 7.0
     assert d["due_date"] == "2024-02-10"
+
+
+def test_edit_goal(monkeypatch, capsys):
+    data = {"goals": [{"name": "Trip", "amount": 500.0, "date": "2024-12-01"}]}
+    _mock_inputs(monkeypatch, ["e", "1", "Trip2", "600", "2025-01-01", "b"])
+    fin.edit_goals(data)
+    g = data["goals"][0]
+    assert g["name"] == "Trip2"
+    assert g["amount"] == 600.0
+    assert g["date"] == "2025-01-01"
+    out = capsys.readouterr().out.lower()
+    assert "wants and goals" in out
+
+
+def test_toggle_goal(monkeypatch):
+    data = {
+        "goals": [
+            {
+                "name": "Trip",
+                "amount": 500.0,
+                "date": "2024-12-01",
+                "enabled": True,
+            }
+        ]
+    }
+    _mock_inputs(monkeypatch, ["t", "1", "b"])
+    fin.edit_goals(data)
+    g = data["goals"][0]
+    assert g["enabled"] is False
+    # Ensure details remain
+    assert g["amount"] == 500.0
+    assert g["date"] == "2024-12-01"

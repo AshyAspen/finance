@@ -85,6 +85,7 @@ def _advance_paycheck(current: date, freq: str, first_day: int) -> date:
 def _build_events(
     paychecks: Iterable[dict],
     bills: Iterable[dict],
+    goals: Iterable[dict],
     debts: Iterable[Debt],
     start: date,
     end: date,
@@ -135,6 +136,19 @@ def _build_events(
                     )
                 )
             current = _add_month(current)
+
+    # One-time goals
+    for g in goals:
+        goal_date = _parse_date(g["date"])
+        if start <= goal_date <= end:
+            events.append(
+                Event(
+                    date=goal_date,
+                    type="goal",
+                    amount=Decimal(str(g["amount"])),
+                    name=g.get("name", "Goal"),
+                )
+            )
 
     # Minimum debt payments
     for d in debts:
@@ -199,6 +213,7 @@ def daily_avalanche_schedule(
     paychecks: Iterable[dict],
     bills: Iterable[dict],
     debts_input: Iterable[dict],
+    goals: Iterable[dict] = (),
     days: int = 60,
     debug: bool = False,
     debt_log: Optional[List[dict]] = None,
@@ -258,7 +273,7 @@ def daily_avalanche_schedule(
     ]
     debt_lookup = {d.name: d for d in debts}
 
-    events = _build_events(paychecks, bills, debts, start, lookahead_end)
+    events = _build_events(paychecks, bills, goals, debts, start, lookahead_end)
 
     schedule: List[dict] = []
     negative_hit: Optional[date] = None
