@@ -21,7 +21,7 @@ def load_data() -> Dict:
 
 
 def save_data(data: Dict) -> None:
-    """Persist financial data to disk."""
+    """Persist financial data to disk, including optional debt links."""
     with DATA_FILE.open("w") as f:
         json.dump(data, f, indent=2)
 
@@ -64,16 +64,30 @@ def edit_paychecks(data: Dict) -> None:
 def edit_bills(data: Dict) -> None:
     """Add or remove bill entries."""
     bills = data.setdefault("bills", [])
+    debt_names = {d["name"] for d in data.get("debts", [])}
     while True:
         print("\nCurrent bills:")
         for i, b in enumerate(bills, 1):
-            print(f"{i}. {b['name']} ${b['amount']} due {b['date']}")
+            debt_info = f" (debt: {b['debt']})" if b.get("debt") else ""
+            print(f"{i}. {b['name']} ${b['amount']} due {b['date']}{debt_info}")
         action = input("A)dd, D)elete, B)ack: ").strip().lower()
         if action == "a":
             name = input("Name: ").strip() or "Bill"
             amount = float(input("Amount: ").strip())
             date = input("Due date (YYYY-MM-DD): ").strip()
-            bills.append({"name": name, "amount": amount, "date": date})
+            debt = None
+            while True:
+                debt_input = input("Associate with debt [none]: ").strip()
+                if not debt_input:
+                    break
+                if debt_input in debt_names:
+                    debt = debt_input
+                    break
+                print("Debt not found. Please try again.")
+            bill = {"name": name, "amount": amount, "date": date}
+            if debt:
+                bill["debt"] = debt
+            bills.append(bill)
             save_data(data)
         elif action == "d":
             _delete_item(bills)
