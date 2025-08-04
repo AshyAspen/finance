@@ -44,7 +44,7 @@ def edit_paychecks(data: Dict) -> None:
         for i, p in enumerate(paychecks, 1):
             freq = p.get("frequency", "monthly")
             print(f"{i}. {p['name']} ${p['amount']} starting {p['date']} ({freq})")
-        action = input("A)dd, D)elete, B)ack: ").strip().lower()
+        action = input("A)dd, E)dit, D)elete, B)ack: ").strip().lower()
         if action == "a":
             name = input("Name: ").strip() or "Paycheck"
             amount = float(input("Amount: ").strip())
@@ -54,6 +54,20 @@ def edit_paychecks(data: Dict) -> None:
                 {"name": name, "amount": amount, "date": date, "frequency": freq}
             )
             save_data(data)
+        elif action == "e":
+            idx = input("Number to edit: ").strip()
+            if idx.isdigit() and 1 <= int(idx) <= len(paychecks):
+                p = paychecks[int(idx) - 1]
+                name = input(f"Name [{p['name']}]: ").strip() or p['name']
+                amount = input(f"Amount [{p['amount']}]: ").strip()
+                date = input(f"First date (YYYY-MM-DD) [{p['date']}]: ").strip() or p['date']
+                freq = input(
+                    f"Frequency [{p.get('frequency', 'monthly')}]: "
+                ).strip() or p.get("frequency", "monthly")
+                if amount:
+                    p['amount'] = float(amount)
+                p.update({"name": name, "date": date, "frequency": freq})
+                save_data(data)
         elif action == "d":
             _delete_item(paychecks)
             save_data(data)
@@ -70,7 +84,7 @@ def edit_bills(data: Dict) -> None:
         for i, b in enumerate(bills, 1):
             debt_info = f" (debt: {b['debt']})" if b.get("debt") else ""
             print(f"{i}. {b['name']} ${b['amount']} due {b['date']}{debt_info}")
-        action = input("A)dd, D)elete, B)ack: ").strip().lower()
+        action = input("A)dd, E)dit, D)elete, B)ack: ").strip().lower()
         if action == "a":
             name = input("Name: ").strip() or "Bill"
             amount = float(input("Amount: ").strip())
@@ -93,6 +107,36 @@ def edit_bills(data: Dict) -> None:
                 bill["debt"] = debt
             bills.append(bill)
             save_data(data)
+        elif action == "e":
+            idx = input("Number to edit: ").strip()
+            if idx.isdigit() and 1 <= int(idx) <= len(bills):
+                b = bills[int(idx) - 1]
+                name = input(f"Name [{b['name']}]: ").strip() or b['name']
+                amount = input(f"Amount [{b['amount']}]: ").strip()
+                date = input(f"Due date (YYYY-MM-DD) [{b['date']}]: ").strip() or b['date']
+                b.update({"name": name, "date": date})
+                if amount:
+                    b['amount'] = float(amount)
+                if debts:
+                    while True:
+                        print("Associate with debt? (0 for none)")
+                        for i, d in enumerate(debts, 1):
+                            print(f"{i}. {d['name']}")
+                        current = next(
+                            (i + 1 for i, d in enumerate(debts) if d['name'] == b.get('debt')),
+                            0,
+                        )
+                        choice = input(f"Debt number [{current}]: ").strip()
+                        if not choice:
+                            choice = str(current)
+                        if choice == "0":
+                            b.pop("debt", None)
+                            break
+                        if choice.isdigit() and 1 <= int(choice) <= len(debts):
+                            b["debt"] = debts[int(choice) - 1]["name"]
+                            break
+                        print("Invalid selection. Please try again.")
+                save_data(data)
         elif action == "d":
             _delete_item(bills)
             save_data(data)
@@ -109,7 +153,7 @@ def edit_debts(data: Dict) -> None:
             print(
                 f"{i}. {d['name']} balance ${d['balance']} min ${d['minimum_payment']} APR {d['apr']} due {d['due_date']}"
             )
-        action = input("A)dd, D)elete, B)ack: ").strip().lower()
+        action = input("A)dd, E)dit, D)elete, B)ack: ").strip().lower()
         if action == "a":
             name = input("Name: ").strip() or "Debt"
             balance = float(input("Balance: ").strip())
@@ -126,6 +170,25 @@ def edit_debts(data: Dict) -> None:
                 }
             )
             save_data(data)
+        elif action == "e":
+            idx = input("Number to edit: ").strip()
+            if idx.isdigit() and 1 <= int(idx) <= len(debts):
+                d = debts[int(idx) - 1]
+                name = input(f"Name [{d['name']}]: ").strip() or d['name']
+                balance = input(f"Balance [{d['balance']}]: ").strip()
+                minimum = input(f"Minimum payment [{d['minimum_payment']}]: ").strip()
+                apr = input(f"APR [{d['apr']}]: ").strip()
+                due = input(
+                    f"Next due date (YYYY-MM-DD) [{d.get('due_date', '')}]: "
+                ).strip() or d.get("due_date", "")
+                if balance:
+                    d['balance'] = float(balance)
+                if minimum:
+                    d['minimum_payment'] = float(minimum)
+                if apr:
+                    d['apr'] = float(apr)
+                d.update({"name": name, "due_date": due})
+                save_data(data)
         elif action == "d":
             _delete_item(debts)
             save_data(data)
