@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+
+CENT = Decimal("0.01")
 from typing import Iterable, List
 
 
@@ -37,14 +39,17 @@ def _build_events(bills: Iterable[dict], incomes: Iterable[dict]) -> List[CashEv
         events.append(
             CashEvent(
                 date=_parse_date(item["date"]),
-                amount=Decimal(str(item["amount"])) * Decimal("-1"),
+                amount=Decimal(str(item["amount"]))
+                .quantize(CENT, rounding=ROUND_HALF_UP)
+                * Decimal("-1"),
             )
         )
     for item in incomes:
         events.append(
             CashEvent(
                 date=_parse_date(item["date"]),
-                amount=Decimal(str(item["amount"])),
+                amount=Decimal(str(item["amount"]))
+                .quantize(CENT, rounding=ROUND_HALF_UP),
             )
         )
     # Sort by date; on same day, incomes (positive) should apply before bills
@@ -57,7 +62,7 @@ def projected_min_balance(
 ) -> tuple[Decimal, date | None]:
     """Return the minimum projected balance and when it occurs."""
 
-    balance = Decimal(str(initial_balance))
+    balance = Decimal(str(initial_balance)).quantize(CENT, rounding=ROUND_HALF_UP)
     events = _build_events(bills, incomes)
 
     running = balance
@@ -65,6 +70,7 @@ def projected_min_balance(
     negative_date = None
     for event in events:
         running += event.amount
+        running = running.quantize(CENT, rounding=ROUND_HALF_UP)
         if running < min_balance:
             min_balance = running
         if negative_date is None and running < 0:
@@ -95,7 +101,7 @@ def max_safe_payment(initial_balance: float | Decimal, bills: Iterable[dict], in
     """
 
     min_balance, _ = projected_min_balance(initial_balance, bills, incomes)
-    return max(Decimal("0"), min_balance)
+    return max(Decimal("0"), min_balance.quantize(CENT, rounding=ROUND_HALF_UP))
 
 
 if __name__ == "__main__":

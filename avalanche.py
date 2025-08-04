@@ -13,11 +13,13 @@ debt, and interest is accrued on all outstanding debts at the end of the day.
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
 from cash_flow import projected_min_balance
+
+CENT = Decimal("0.01")
 
 
 @dataclass
@@ -102,7 +104,7 @@ def _build_events(
                 Event(
                     date=current,
                     type="paycheck",
-                    amount=Decimal(str(p["amount"])),
+                    amount=Decimal(str(p["amount"])).quantize(CENT, rounding=ROUND_HALF_UP),
                     name=p.get("name", "Paycheck"),
                 )
             )
@@ -119,7 +121,7 @@ def _build_events(
                     Event(
                         date=current,
                         type="debt_add",
-                        amount=Decimal(str(b["amount"])),
+                        amount=Decimal(str(b["amount"])).quantize(CENT, rounding=ROUND_HALF_UP),
                         name=b.get("name", "Bill"),
                         debt=b["debt"],
                     )
@@ -129,7 +131,7 @@ def _build_events(
                     Event(
                         date=current,
                         type="bill",
-                        amount=Decimal(str(b["amount"])),
+                        amount=Decimal(str(b["amount"])).quantize(CENT, rounding=ROUND_HALF_UP),
                         name=b.get("name", "Bill"),
                     )
                 )
@@ -147,7 +149,7 @@ def _build_events(
                 Event(
                     current,
                     "debt_min",
-                    d.minimum_payment,
+                    d.minimum_payment.quantize(CENT, rounding=ROUND_HALF_UP),
                     d.name,
                     debt=d.name,
                 )
@@ -205,7 +207,7 @@ def daily_avalanche_schedule(
         If projected cash flow indicates the balance will drop below zero.
     """
 
-    balance = Decimal(str(starting_balance))
+    balance = Decimal(str(starting_balance)).quantize(CENT, rounding=ROUND_HALF_UP)
 
     start = date.today()
     end = start + timedelta(days=days)
@@ -239,6 +241,7 @@ def daily_avalanche_schedule(
         # Process income first
         for ev in [e for e in todays if e.type == "paycheck"]:
             balance += ev.amount
+            balance = balance.quantize(CENT, rounding=ROUND_HALF_UP)
             schedule.append(
                 {
                     "date": ev.date,
@@ -254,12 +257,13 @@ def daily_avalanche_schedule(
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount
+                debt.balance = debt.balance.quantize(CENT, rounding=ROUND_HALF_UP)
                 schedule.append(
                     {
                         "date": ev.date,
                         "type": ev.type,
                         "description": ev.name,
-                        "amount": Decimal("0"),
+                        "amount": ev.amount.quantize(CENT, rounding=ROUND_HALF_UP),
                         "balance": balance,
                     }
                 )
@@ -272,9 +276,12 @@ def daily_avalanche_schedule(
                 if payment_amount <= 0:
                     continue
                 debt.balance -= payment_amount
+                debt.balance = debt.balance.quantize(CENT, rounding=ROUND_HALF_UP)
                 if debt.balance <= 0 and debt.paid_off_date is None:
                     debt.paid_off_date = ev.date
+            payment_amount = payment_amount.quantize(CENT, rounding=ROUND_HALF_UP)
             balance -= payment_amount
+            balance = balance.quantize(CENT, rounding=ROUND_HALF_UP)
             if balance < 0:
                 raise ValueError(
                     f"Balance would go negative on {ev.date}"  # pragma: no cover - string only
@@ -291,17 +298,30 @@ def daily_avalanche_schedule(
 
         # Future events for safe-payment calculation
         future_events = events[i:]
-        future_bills = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
-            for ev in future_events
-            if ev.type not in {"paycheck", "debt_add"}
-            and (
-                ev.type != "debt_min"
-                or debt_lookup[(ev.debt or ev.name)].balance > 0
-            )
-        ]
+        future_bills = []
+        for ev in future_events:
+            if ev.type in {"paycheck", "debt_add"}:
+                continue
+            if ev.type == "debt_min":
+                debt = debt_lookup[ev.debt or ev.name]
+                # Include upcoming debt additions before this payment
+                future_balance = debt.balance
+                for add in future_events:
+                    if (
+                        add.type == "debt_add"
+                        and (add.debt or add.name) == debt.name
+                        and add.date <= ev.date
+                    ):
+                        future_balance += add.amount
+                if future_balance <= 0:
+                    continue
+                amount = min(ev.amount, future_balance)
+            else:
+                amount = ev.amount
+            amount = amount.quantize(CENT, rounding=ROUND_HALF_UP)
+            future_bills.append({"amount": amount, "date": ev.date.isoformat()})
         future_incomes = [
-            {"amount": ev.amount, "date": ev.date.isoformat()}
+            {"amount": ev.amount.quantize(CENT, rounding=ROUND_HALF_UP), "date": ev.date.isoformat()}
             for ev in future_events
             if ev.type == "paycheck"
         ]
@@ -314,17 +334,21 @@ def daily_avalanche_schedule(
                 f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
             )
         safe = max(Decimal("0"), min_balance)
+        safe = safe.quantize(CENT, rounding=ROUND_DOWN)
 
         if safe > 0:
             active_debts = [d for d in debts if d.balance > 0]
             if active_debts:
                 target = max(active_debts, key=lambda d: d.apr)
                 payment = min(safe, target.balance)
+                payment = payment.quantize(CENT, rounding=ROUND_DOWN)
                 if payment > 0:
                     target.balance -= payment
+                    target.balance = target.balance.quantize(CENT, rounding=ROUND_HALF_UP)
                     if target.balance <= 0 and target.paid_off_date is None:
                         target.paid_off_date = current_date
                     balance -= payment
+                    balance = balance.quantize(CENT, rounding=ROUND_HALF_UP)
                     schedule.append(
                         {
                             "date": current_date,
