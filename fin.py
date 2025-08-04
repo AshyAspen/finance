@@ -260,6 +260,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     paychecks = data.get("paychecks", [])
     bills = data.get("bills", [])
     debts = data.get("debts", [])
+    goals = [g for g in data.get("goals", []) if g.get("enabled", True)]
 
     debt_log = None
 
@@ -271,6 +272,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
             paychecks,
             bills,
             debts,
+            goals,
             days=days,
             debug=True,
             debt_log=debt_log,
@@ -278,7 +280,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     else:
         try:
             schedule, debts_after, negative_hit = daily_avalanche_schedule(
-                start_balance, paychecks, bills, debts, days=days
+                start_balance, paychecks, bills, debts, goals, days=days
             )
         except ValueError as exc:
             print(f"Warning: {exc}")
@@ -305,6 +307,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
                 paychecks,
                 bills,
                 debts,
+                goals,
                 days=extra_days,
                 debug=True,
                 debt_log=debt_log,
@@ -316,6 +319,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
         lambda: {
             "paycheck": Decimal("0"),
             "bill": Decimal("0"),
+            "goal": Decimal("0"),
             "debt_min": Decimal("0"),
             "extra": Decimal("0"),
             "debt_add": Decimal("0"),
@@ -345,7 +349,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
             if debts_str:
                 line += f" | debts: {debts_str}"
         print(line)
-        for cat in ["paycheck", "bill", "debt_min", "extra", "debt_add"]:
+        for cat in ["paycheck", "bill", "goal", "debt_min", "extra", "debt_add"]:
             if d["names"][cat]:
                 items = ", ".join(
                     f"{name} ${(-amt if amt < 0 else amt):.2f}"
@@ -354,6 +358,7 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
                 label = {
                     "paycheck": "Income",
                     "bill": "Bills",
+                    "goal": "Goals",
                     "debt_min": "Debt minimums",
                     "extra": "Extra",
                     "debt_add": "Debt additions",
