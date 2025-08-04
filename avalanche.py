@@ -261,6 +261,7 @@ def daily_avalanche_schedule(
             {"amount": ev.amount, "date": ev.date.isoformat()}
             for ev in future_events
             if ev.type != "paycheck"
+            and (ev.type != "debt_min" or debt_lookup[ev.name].balance > 0)
         ]
         future_incomes = [
             {"amount": ev.amount, "date": ev.date.isoformat()}
@@ -271,7 +272,7 @@ def daily_avalanche_schedule(
         min_balance, negative_date = projected_min_balance(
             balance, future_bills, future_incomes
         )
-        if negative_date is not None:
+        if negative_date is not None and negative_date <= end:
             raise ValueError(
                 f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
             )
