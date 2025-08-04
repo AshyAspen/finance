@@ -22,7 +22,7 @@ def test_bill_adds_to_debt_not_balance():
 
     assert schedule[0]["type"] == "debt_add"
     assert schedule[0]["balance"] == 0
-    assert schedule[0]["amount"] == 0
+    assert float(schedule[0]["amount"]) == 200.0
 
     card = next(d for d in after if d["name"] == "Card")
     assert float(card["balance"]) == 200.0

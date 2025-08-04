@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(Path(__file__).resolve().parent, "..")))
 
 import fin
+from avalanche import daily_avalanche_schedule
 
 
 def test_run_simulation_handles_debt_add(monkeypatch, capsys):
@@ -36,3 +37,10 @@ def test_run_simulation_handles_debt_add(monkeypatch, capsys):
     fin.run_simulation(data)
     output = capsys.readouterr().out
     assert "Debt additions" in output
+    assert "Purchase $25.00" in output
+
+    schedule, _ = daily_avalanche_schedule(
+        0, [], data["bills"], data["debts"], days=1
+    )
+    assert schedule[0]["amount"] == 25
+    assert schedule[0]["balance"] == 0

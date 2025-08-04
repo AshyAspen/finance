@@ -259,7 +259,7 @@ def daily_avalanche_schedule(
                         "date": ev.date,
                         "type": ev.type,
                         "description": ev.name,
-                        "amount": Decimal("0"),
+                        "amount": ev.amount,
                         "balance": balance,
                     }
                 )
