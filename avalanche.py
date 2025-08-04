@@ -13,7 +13,7 @@ debt, and interest is accrued on all outstanding debts at the end of the day.
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
@@ -44,6 +44,7 @@ class Debt:
     paid_off_date: Optional[date] = None
     interest_accrued: Decimal = Decimal("0")
     interest_buffer: Decimal = Decimal("0")
+    interest_charges: Decimal = Decimal("0")
     min_payment_formula: Optional[str] = None
     min_payment_args: dict = field(default_factory=dict)
 
@@ -382,6 +383,8 @@ def daily_avalanche_schedule(
                 if payment_amount <= 0:
                     continue
                 debt.balance -= payment_amount
+                interest_pay = min(payment_amount, debt.interest_charges)
+                debt.interest_charges -= interest_pay
                 if debt.balance <= 0 and debt.paid_off_date is None:
                     debt.paid_off_date = ev.date
             balance -= payment_amount
@@ -411,6 +414,7 @@ def daily_avalanche_schedule(
         future_bills: List[dict] = []
         future_incomes: List[dict] = []
         simulated_balances = {d.name: d.balance for d in debts}
+        simulated_interest = {d.name: d.interest_charges for d in debts}
         pending_min: dict[str, Decimal] = {}
         last_sim_date = current_date
         for fev in future_events:
@@ -419,8 +423,11 @@ def daily_avalanche_schedule(
             if delta_days > 0:
                 for name, bal in simulated_balances.items():
                     apr = debt_lookup[name].apr
-                    if bal > 0 and apr > 0:
-                        simulated_balances[name] += bal * apr / Decimal("36500") * delta_days
+                    principal = bal - simulated_interest[name]
+                    if principal > 0 and apr > 0:
+                        simulated_interest[name] += (
+                            principal * apr / Decimal("36500") * delta_days
+                        )
                 last_sim_date = fev.date
             if fev.type == "paycheck":
                 future_incomes.append({"amount": fev.amount, "date": fev.date.isoformat()})
@@ -444,6 +451,8 @@ def daily_avalanche_schedule(
                     continue
                 amount = pending_min.pop(name, fev.amount)
                 future_bills.append({"amount": amount, "date": fev.date.isoformat()})
+                interest_pay = min(amount, simulated_interest[name])
+                simulated_interest[name] -= interest_pay
                 simulated_balances[name] = max(
                     Decimal("0"), simulated_balances[name] - amount
                 )
@@ -469,6 +478,8 @@ def daily_avalanche_schedule(
                 payment = min(safe, target.balance)
                 if payment > 0:
                     target.balance -= payment
+                    interest_pay = min(payment, target.interest_charges)
+                    target.interest_charges -= interest_pay
                     if target.balance <= 0 and target.paid_off_date is None:
                         target.paid_off_date = current_date
                     balance -= payment
@@ -482,70 +493,77 @@ def daily_avalanche_schedule(
                         }
                     )
 
-        # Accrue daily interest and apply it at month end
+        # Accrue daily interest on principal only and apply it at month end
         for debt in debts:
             if debt.balance > 0 and debt.apr > 0:
-                interest = debt.balance * debt.apr / Decimal("36500")
-                debt.interest_buffer += interest
-                debt.interest_accrued += interest
+                principal = debt.balance - debt.interest_charges
+                if principal > 0:
+                    interest = principal * debt.apr / Decimal("36500")
+                    debt.interest_buffer += interest
+                    debt.interest_accrued += interest
 
         next_day = current_date + timedelta(days=1)
         if next_day.month != current_date.month:
             for debt in debts:
                 if debt.interest_buffer > 0:
-                    debt.balance += debt.interest_buffer
-                    debt.min_payment_args["interest_billed"] = debt.interest_buffer
+                    interest_billed = debt.interest_buffer.quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                    if interest_billed > 0:
+                        debt.balance += interest_billed
+                        debt.interest_charges += interest_billed
+                        debt.min_payment_args["interest_billed"] = interest_billed
 
-                    new_min = compute_min_payment(debt, current_date)
-                    if debt.due_date is not None and new_min > 0:
-                        debt.minimum_payment = new_min
-                        next_due = debt.due_date
-                        while next_due <= current_date:
-                            next_due = _add_month(next_due)
-                        inserted = False
-                        for j in range(i, len(events)):
-                            future_ev = events[j]
-                            if (
-                                future_ev.date == next_due
-                                and future_ev.type == "debt_min"
-                                and (future_ev.debt or future_ev.name) == debt.name
-                            ):
-                                future_ev.amount = new_min
-                                inserted = True
-                                break
-                            if future_ev.date > next_due:
-                                events.insert(
-                                    j,
+                        new_min = compute_min_payment(debt, current_date)
+                        if debt.due_date is not None and new_min > 0:
+                            debt.minimum_payment = new_min
+                            next_due = debt.due_date
+                            while next_due <= current_date:
+                                next_due = _add_month(next_due)
+                            inserted = False
+                            for j in range(i, len(events)):
+                                future_ev = events[j]
+                                if (
+                                    future_ev.date == next_due
+                                    and future_ev.type == "debt_min"
+                                    and (future_ev.debt or future_ev.name) == debt.name
+                                ):
+                                    future_ev.amount = new_min
+                                    inserted = True
+                                    break
+                                if future_ev.date > next_due:
+                                    events.insert(
+                                        j,
+                                        Event(
+                                            date=next_due,
+                                            type="debt_min",
+                                            amount=new_min,
+                                            name=debt.name,
+                                            debt=debt.name,
+                                        ),
+                                    )
+                                    inserted = True
+                                    break
+                            if not inserted:
+                                events.append(
                                     Event(
                                         date=next_due,
                                         type="debt_min",
                                         amount=new_min,
                                         name=debt.name,
                                         debt=debt.name,
-                                    ),
+                                    )
                                 )
-                                inserted = True
-                                break
-                        if not inserted:
-                            events.append(
-                                Event(
-                                    date=next_due,
-                                    type="debt_min",
-                                    amount=new_min,
-                                    name=debt.name,
-                                    debt=debt.name,
-                                )
-                            )
 
-                    schedule.append(
-                        {
-                            "date": current_date,
-                            "type": "debt_add",
-                            "description": f"{debt.name} interest",
-                            "amount": debt.interest_buffer,
-                            "balance": balance,
-                        }
-                    )
+                        schedule.append(
+                            {
+                                "date": current_date,
+                                "type": "debt_add",
+                                "description": f"{debt.name} interest",
+                                "amount": interest_billed,
+                                "balance": balance,
+                            }
+                        )
                     debt.interest_buffer = Decimal("0")
 
         if debug and debt_log is not None:
@@ -554,6 +572,9 @@ def daily_avalanche_schedule(
                     "date": current_date,
                     "balance": balance,
                     "debts": {d.name: d.balance for d in debts},
+                    "interest_charges": {
+                        d.name: d.interest_charges for d in debts
+                    },
                 }
             )
 
@@ -564,6 +585,7 @@ def daily_avalanche_schedule(
             "name": d.name,
             "balance": d.balance,
             "interest_accrued": d.interest_accrued,
+            "interest_charges": d.interest_charges,
             "next_due_date": None
             if d.paid_off_date
             else _next_due_date(d.due_date, end),

@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import date, timedelta
 from calendar import monthrange
-from decimal import Decimal, ROUND_UP
+from decimal import Decimal, ROUND_UP, ROUND_HALF_UP
 from pathlib import Path
 
 import pytest
@@ -53,12 +53,14 @@ def test_installment_and_interest_added_and_min_payment():
 
     rate = Decimal("24") / Decimal("36500")
     remaining = (end_of_month - today).days + 1
-    expected_interest = rate * (Decimal("1000") * (remaining - 1) + Decimal("1050"))
-    assert float(interest_event["amount"]) == pytest.approx(float(expected_interest), rel=1e-4)
+    expected_interest = (
+        rate * (Decimal("1000") * (remaining - 1) + Decimal("1050"))
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    assert interest_event["amount"] == expected_interest
 
     debt_min = next(ev for ev in schedule if ev["type"] == "debt_min")
     regular_balance = Decimal("1000") + Decimal("50") + expected_interest
     base = (regular_balance * Decimal("0.01")).quantize(Decimal("1"), rounding=ROUND_UP)
     base = max(Decimal("25"), base)
     expected_min = base + expected_interest + Decimal("50")
-    assert float(-debt_min["amount"]) == pytest.approx(float(expected_min), rel=1e-4)
+    assert -debt_min["amount"] == expected_min
