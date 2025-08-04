@@ -167,16 +167,25 @@ def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
     return current
 
 
-def compute_min_payment(debt: Debt) -> Decimal:
+def compute_min_payment(debt: Debt, as_of: date) -> Decimal:
     """Return an estimated minimum payment for ``debt``.
 
-    The calculation uses a simple heuristic of 1% of the current balance plus
-    one month's interest, rounded to the nearest cent. This matches typical
-    credit card minimum payment formulas and keeps the value consistent across
-    scheduling cycles.
+    The estimate is based on 1% of the projected balance at the next due date
+    plus one month's interest. When projecting the balance we accrue daily
+    interest from ``as_of`` until the upcoming due date so that callers reserve
+    enough cash for the payment.
     """
 
-    base = debt.balance * (debt.apr / Decimal("1200") + Decimal("0.01"))
+    balance = debt.balance
+    if debt.due_date and debt.apr > 0:
+        next_due = debt.due_date
+        while next_due <= as_of:
+            next_due = _add_month(next_due)
+        days = (next_due - as_of).days
+        if days > 0:
+            balance += balance * debt.apr / Decimal("36500") * days
+
+    base = balance * (debt.apr / Decimal("1200") + Decimal("0.01"))
     return base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
@@ -286,7 +295,7 @@ def daily_avalanche_schedule(
                 debt.balance += ev.amount
 
                 # Recompute the minimum payment after the additional charge
-                new_min = compute_min_payment(debt)
+                new_min = compute_min_payment(debt, current_date)
                 if debt.due_date is not None and new_min > 0:
                     debt.minimum_payment = new_min
                     next_due = debt.due_date
@@ -376,7 +385,16 @@ def daily_avalanche_schedule(
         future_incomes: List[dict] = []
         simulated_balances = {d.name: d.balance for d in debts}
         pending_min: dict[str, Decimal] = {}
+        last_sim_date = current_date
         for fev in future_events:
+            # Accrue interest on simulated balances up to this event
+            delta_days = (fev.date - last_sim_date).days
+            if delta_days > 0:
+                for name, bal in simulated_balances.items():
+                    apr = debt_lookup[name].apr
+                    if bal > 0 and apr > 0:
+                        simulated_balances[name] += bal * apr / Decimal("36500") * delta_days
+                last_sim_date = fev.date
             if fev.type == "paycheck":
                 future_incomes.append({"amount": fev.amount, "date": fev.date.isoformat()})
                 continue
@@ -387,8 +405,9 @@ def daily_avalanche_schedule(
                     balance=simulated_balances[fev.debt],
                     apr=debt_lookup[fev.debt].apr,
                     minimum_payment=Decimal("0"),
+                    due_date=debt_lookup[fev.debt].due_date,
                 )
-                pending_min[fev.debt] = compute_min_payment(temp_debt)
+                pending_min[fev.debt] = compute_min_payment(temp_debt, fev.date)
                 continue
             if fev.type == "debt_min":
                 name = fev.debt or fev.name
@@ -396,7 +415,9 @@ def daily_avalanche_schedule(
                     continue
                 amount = pending_min.pop(name, fev.amount)
                 future_bills.append({"amount": amount, "date": fev.date.isoformat()})
-                simulated_balances[name] = max(Decimal("0"), simulated_balances[name] - amount)
+                simulated_balances[name] = max(
+                    Decimal("0"), simulated_balances[name] - amount
+                )
                 continue
             future_bills.append({"amount": fev.amount, "date": fev.date.isoformat()})
 
