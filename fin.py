@@ -6,8 +6,10 @@ from avalanche import daily_avalanche_schedule
 
 
 def main() -> None:
-    """Run a 60-day event-based debt forecast using the avalanche scheduler."""
+    """Run an event-based debt forecast using the avalanche scheduler."""
     print("---  Debt Avalanche Forecaster ---")
+    days_str = input("Enter number of days to simulate [60]: ").strip()
+    days = int(days_str) if days_str else 60
     start_balance = Decimal(input("Enter current account balance: ").strip())
 
     data_file = Path(__file__).with_name("financial_data.json")
@@ -19,7 +21,7 @@ def main() -> None:
     debts = data.get("debts", [])
 
     schedule, debts_after = daily_avalanche_schedule(
-        start_balance, paychecks, bills, debts
+        start_balance, paychecks, bills, debts, days=days
     )
 
     # Summarize events by date
@@ -61,7 +63,7 @@ def main() -> None:
                 }[cat]
                 print(f"  {label}: {items}")
 
-    print("\nRemaining debt balances after 60 days:")
+    print(f"\nRemaining debt balances after {days} days:")
     for d in debts_after:
         due = d.get("next_due_date")
         due_str = due.isoformat() if due else "N/A"
