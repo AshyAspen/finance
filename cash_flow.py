@@ -52,6 +52,27 @@ def _build_events(bills: Iterable[dict], incomes: Iterable[dict]) -> List[CashEv
     return events
 
 
+def projected_min_balance(
+    initial_balance: float | Decimal, bills: Iterable[dict], incomes: Iterable[dict]
+) -> tuple[Decimal, date | None]:
+    """Return the minimum projected balance and when it occurs."""
+
+    balance = Decimal(str(initial_balance))
+    events = _build_events(bills, incomes)
+
+    running = balance
+    min_balance = running
+    negative_date = None
+    for event in events:
+        running += event.amount
+        if running < min_balance:
+            min_balance = running
+        if negative_date is None and running < 0:
+            negative_date = event.date
+
+    return min_balance, negative_date
+
+
 def max_safe_payment(initial_balance: float | Decimal, bills: Iterable[dict], incomes: Iterable[dict]) -> Decimal:
     """Return the largest amount that can be paid today without future overdraft.
 
@@ -73,18 +94,7 @@ def max_safe_payment(initial_balance: float | Decimal, bills: Iterable[dict], in
         keeping the balance non-negative for all future events.
     """
 
-    balance = Decimal(str(initial_balance))
-    events = _build_events(bills, incomes)
-
-    running = balance
-    min_balance = running
-    for event in events:
-        running += event.amount
-        if running < min_balance:
-            min_balance = running
-
-    # If the minimum future balance is negative, no additional payment can be
-    # made without going negative. Otherwise, that minimum is the safe payment.
+    min_balance, _ = projected_min_balance(initial_balance, bills, incomes)
     return max(Decimal("0"), min_balance)
 
 

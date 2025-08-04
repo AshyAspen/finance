@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
-from cash_flow import max_safe_payment
+from cash_flow import projected_min_balance
 
 
 @dataclass
@@ -178,6 +178,11 @@ def daily_avalanche_schedule(
         ``schedule`` of transactions and a list of ``debts`` with updated balances and
         either a ``next_due_date`` for outstanding debts or a ``paid_off_date`` for debts
         that have been fully repaid.
+
+    Raises
+    ------
+    ValueError
+        If projected cash flow indicates the balance will drop below zero.
     """
 
     balance = Decimal(str(starting_balance))
@@ -235,6 +240,10 @@ def daily_avalanche_schedule(
                 if debt.balance <= 0 and debt.paid_off_date is None:
                     debt.paid_off_date = ev.date
             balance -= payment_amount
+            if balance < 0:
+                raise ValueError(
+                    f"Balance would go negative on {ev.date}"  # pragma: no cover - string only
+                )
             schedule.append(
                 {
                     "date": ev.date,
@@ -257,7 +266,15 @@ def daily_avalanche_schedule(
             for ev in future_events
             if ev.type == "paycheck"
         ]
-        safe = max_safe_payment(balance, future_bills, future_incomes)
+
+        min_balance, negative_date = projected_min_balance(
+            balance, future_bills, future_incomes
+        )
+        if negative_date is not None:
+            raise ValueError(
+                f"Balance would go negative on {negative_date}"  # pragma: no cover - string only
+            )
+        safe = max(Decimal("0"), min_balance)
 
         if safe > 0:
             active_debts = [d for d in debts if d.balance > 0]
