@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(Path(__file__).resolve().parent, "..")))
 
 from avalanche import daily_avalanche_schedule
+from min_payments.credit_card import calculate as credit_card_min_payment
 
 
 def test_debt_add_updates_min_payment_and_reserves_cash():
@@ -27,7 +28,7 @@ def test_debt_add_updates_min_payment_and_reserves_cash():
             "apr": 0.0,
             "minimum_payment": 1.0,
             "due_date": (today + timedelta(days=10)).isoformat(),
-            "min_payment_formula": "credit_card",
+            "min_payment_formula": credit_card_min_payment,
         }
     ]
 

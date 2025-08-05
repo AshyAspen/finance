@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(Path(__file__).resolve().parent, "..")))
 
 from avalanche import daily_avalanche_schedule
+from min_payments.apple_card import calculate as apple_card_min_payment
 
 
 def test_first_min_payment_includes_prior_interest_and_installment():
@@ -19,13 +20,22 @@ def test_first_min_payment_includes_prior_interest_and_installment():
             "name": "Apple Card",
             "balance": 1000.0,
             "apr": 26.24,
-            "minimum_payment": 0.0,
             "due_date": due_date.isoformat(),
-            "min_payment_formula": "apple_card",
+            "min_payment_formula": apple_card_min_payment,
             "interest_method": "apple_card",
-            "interest_billed": 90.0,
-            "installment_due": 50.0,
-            "financing_balance": 600.0,
+            "min_payment_args": {
+                "statement_balance": 1000.0,
+                "interest_accrued": 90.0,
+                "installments": [
+                    {
+                        "balance": 500.0,
+                        "minimum_payment": 50.0,
+                        "term_months": 12,
+                        "start_date": due_date.isoformat(),
+                    }
+                ],
+                "daily_cash_adjustments": [],
+            },
         }
     ]
 
@@ -33,10 +43,8 @@ def test_first_min_payment_includes_prior_interest_and_installment():
 
     debt_min = next(ev for ev in schedule if ev["type"] == "debt_min")
 
-    regular_balance = Decimal("1000") - Decimal("600")
-    base = (regular_balance * Decimal("0.01")).quantize(Decimal("1"), rounding=ROUND_UP)
-    base = max(Decimal("25"), base)
-    expected = base + Decimal("90") + Decimal("50")
+    payment_sum = Decimal("1000") * Decimal("0.01") + Decimal("90")
+    expected = payment_sum.quantize(Decimal("1"), rounding=ROUND_UP) + Decimal("50")
 
     assert debt_min["date"] == due_date
     assert -debt_min["amount"] == expected
