@@ -17,10 +17,7 @@ def test_daily_interest_accrual():
     interest = loan_info["interest_accrued"]
 
     rate = Decimal("36.5") / Decimal("36500")
-    expected = Decimal("1000")
-    for _ in range(3):
-        expected += expected * rate
     precision = Decimal("0.000001")
-    assert loan_balance.quantize(precision) == expected.quantize(precision)
-    expected_interest = expected - Decimal("1000")
+    expected_interest = Decimal("1000") * rate * 3
+    assert loan_balance.quantize(precision) == Decimal("1000").quantize(precision)
     assert interest.quantize(precision) == expected_interest.quantize(precision)

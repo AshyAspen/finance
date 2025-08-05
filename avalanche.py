@@ -11,13 +11,15 @@ calculated by ``cash_flow.max_safe_payment``) is directed to the highest-APR
 debt, and interest is accrued on all outstanding debts at the end of the day.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, List, Optional, Tuple
 from calendar import monthrange
 
 from cash_flow import projected_min_balance
+from minimum_payments import FORMULAS
+from interest import INTEREST_METHODS
 
 
 @dataclass
@@ -42,6 +44,13 @@ class Debt:
     due_date: Optional[date] = None
     paid_off_date: Optional[date] = None
     interest_accrued: Decimal = Decimal("0")
+    interest_buffer: Decimal = Decimal("0")
+    interest_charges: Decimal = Decimal("0")
+    min_payment_formula: Optional[str] = None
+    min_payment_args: dict = field(default_factory=dict)
+    balance_subject_to_interest: Decimal = Decimal("0")
+    grace_charges: List[Tuple[date, Decimal]] = field(default_factory=list)
+    interest_method: str = "credit_card"
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +122,13 @@ def _build_events(
     # Recurring bills
     for b in bills:
         current = _parse_date(b["date"])
-        while current < start:
+        term = int(b.get("term_months", 0))
+        generated = 0
+        while current < start and (not term or generated < term):
             current = _add_month(current)
-        while current <= end:
+            if term:
+                generated += 1
+        while current <= end and (not term or generated < term):
             if "debt" in b:
                 events.append(
                     Event(
@@ -136,6 +149,8 @@ def _build_events(
                     )
                 )
             current = _add_month(current)
+            if term:
+                generated += 1
 
     # One-time goals
     for g in goals:
@@ -183,25 +198,18 @@ def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
 
 
 def compute_min_payment(debt: Debt, as_of: date) -> Decimal:
-    """Return an estimated minimum payment for ``debt``.
+    """Return the minimum payment for ``debt`` based on configured formulas."""
 
-    The estimate is based on 1% of the projected balance at the next due date
-    plus one month's interest. When projecting the balance we accrue daily
-    interest from ``as_of`` until the upcoming due date so that callers reserve
-    enough cash for the payment.
-    """
+    if debt.min_payment_formula:
+        try:
+            formula = FORMULAS[debt.min_payment_formula]
+        except KeyError:  # pragma: no cover - defensive branch
+            raise ValueError(
+                f"Unknown minimum payment formula: {debt.min_payment_formula}"
+            )
+        return formula(debt, as_of)
 
-    balance = debt.balance
-    if debt.due_date and debt.apr > 0:
-        next_due = debt.due_date
-        while next_due <= as_of:
-            next_due = _add_month(next_due)
-        days = (next_due - as_of).days
-        if days > 0:
-            balance += balance * debt.apr / Decimal("36500") * days
-
-    base = balance * (debt.apr / Decimal("1200") + Decimal("0.01"))
-    return base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return debt.minimum_payment
 
 
 # ---------------------------------------------------------------------------
@@ -268,10 +276,35 @@ def daily_avalanche_schedule(
             apr=Decimal(str(d["apr"])),
             minimum_payment=Decimal(str(d.get("minimum_payment", 0))),
             due_date=_parse_date(d["due_date"]) if d.get("due_date") else None,
+            min_payment_formula=d.get("min_payment_formula"),
+            min_payment_args={
+                k: Decimal(str(v))
+                for k, v in d.items()
+                if k
+                not in {
+                    "name",
+                    "balance",
+                    "apr",
+                    "minimum_payment",
+                    "due_date",
+                    "min_payment_formula",
+                    "interest_method",
+                    "installment_term",
+                }
+            },
+            balance_subject_to_interest=Decimal(str(d["balance"])),
+            interest_method=d.get("interest_method", "credit_card"),
         )
         for d in debts_input
     ]
     debt_lookup = {d.name: d for d in debts}
+
+    # Recompute minimum payments using any configured formulas so the first
+    # scheduled payment reflects up-to-date parameters such as previously billed
+    # interest supplied by the user.
+    for d in debts:
+        if d.min_payment_formula:
+            d.minimum_payment = compute_min_payment(d, start)
 
     events = _build_events(paychecks, bills, goals, debts, start, lookahead_end)
 
@@ -309,6 +342,9 @@ def daily_avalanche_schedule(
             if ev.type == "debt_add":
                 debt = debt_lookup[ev.debt]
                 debt.balance += ev.amount
+                INTEREST_METHODS[debt.interest_method].add_charge(
+                    debt, ev.amount, ev.date
+                )
 
                 # Recompute the minimum payment after the additional charge
                 new_min = compute_min_payment(debt, current_date)
@@ -371,6 +407,22 @@ def daily_avalanche_schedule(
                 if payment_amount <= 0:
                     continue
                 debt.balance -= payment_amount
+                remaining = payment_amount
+                interest_pay = min(remaining, debt.interest_charges)
+                debt.interest_charges -= interest_pay
+                remaining -= interest_pay
+                principal_pay = min(remaining, debt.balance_subject_to_interest)
+                debt.balance_subject_to_interest -= principal_pay
+                remaining -= principal_pay
+                while remaining > 0 and debt.grace_charges:
+                    ch_date, amt = debt.grace_charges[0]
+                    applied = min(remaining, amt)
+                    amt -= applied
+                    remaining -= applied
+                    if amt == 0:
+                        debt.grace_charges.pop(0)
+                    else:
+                        debt.grace_charges[0] = (ch_date, amt)
                 if debt.balance <= 0 and debt.paid_off_date is None:
                     debt.paid_off_date = ev.date
             balance -= payment_amount
@@ -400,6 +452,7 @@ def daily_avalanche_schedule(
         future_bills: List[dict] = []
         future_incomes: List[dict] = []
         simulated_balances = {d.name: d.balance for d in debts}
+        simulated_interest = {d.name: d.interest_charges for d in debts}
         pending_min: dict[str, Decimal] = {}
         last_sim_date = current_date
         for fev in future_events:
@@ -408,8 +461,11 @@ def daily_avalanche_schedule(
             if delta_days > 0:
                 for name, bal in simulated_balances.items():
                     apr = debt_lookup[name].apr
-                    if bal > 0 and apr > 0:
-                        simulated_balances[name] += bal * apr / Decimal("36500") * delta_days
+                    principal = bal - simulated_interest[name]
+                    if principal > 0 and apr > 0:
+                        simulated_interest[name] += (
+                            principal * apr / Decimal("36500") * delta_days
+                        )
                 last_sim_date = fev.date
             if fev.type == "paycheck":
                 future_incomes.append({"amount": fev.amount, "date": fev.date.isoformat()})
@@ -422,6 +478,9 @@ def daily_avalanche_schedule(
                     apr=debt_lookup[fev.debt].apr,
                     minimum_payment=Decimal("0"),
                     due_date=debt_lookup[fev.debt].due_date,
+                    min_payment_formula=debt_lookup[fev.debt].min_payment_formula,
+                    min_payment_args=debt_lookup[fev.debt].min_payment_args,
+                    balance_subject_to_interest=simulated_balances[fev.debt],
                 )
                 pending_min[fev.debt] = compute_min_payment(temp_debt, fev.date)
                 continue
@@ -431,6 +490,8 @@ def daily_avalanche_schedule(
                     continue
                 amount = pending_min.pop(name, fev.amount)
                 future_bills.append({"amount": amount, "date": fev.date.isoformat()})
+                interest_pay = min(amount, simulated_interest[name])
+                simulated_interest[name] -= interest_pay
                 simulated_balances[name] = max(
                     Decimal("0"), simulated_balances[name] - amount
                 )
@@ -456,6 +517,22 @@ def daily_avalanche_schedule(
                 payment = min(safe, target.balance)
                 if payment > 0:
                     target.balance -= payment
+                    remaining = payment
+                    interest_pay = min(remaining, target.interest_charges)
+                    target.interest_charges -= interest_pay
+                    remaining -= interest_pay
+                    principal_pay = min(remaining, target.balance_subject_to_interest)
+                    target.balance_subject_to_interest -= principal_pay
+                    remaining -= principal_pay
+                    while remaining > 0 and target.grace_charges:
+                        ch_date, amt = target.grace_charges[0]
+                        applied = min(remaining, amt)
+                        amt -= applied
+                        remaining -= applied
+                        if amt == 0:
+                            target.grace_charges.pop(0)
+                        else:
+                            target.grace_charges[0] = (ch_date, amt)
                     if target.balance <= 0 and target.paid_off_date is None:
                         target.paid_off_date = current_date
                     balance -= payment
@@ -469,12 +546,71 @@ def daily_avalanche_schedule(
                         }
                     )
 
-        # Accrue daily interest on all debts at end of day
+        # Accrue daily interest and handle any due-date conversions
         for debt in debts:
-            if debt.balance > 0 and debt.apr > 0:
-                interest = debt.balance * debt.apr / Decimal("36500")
-                debt.balance += interest
-                debt.interest_accrued += interest
+            INTEREST_METHODS[debt.interest_method].daily(debt, current_date)
+
+        next_day = current_date + timedelta(days=1)
+        if next_day.month != current_date.month:
+            for debt in debts:
+                interest_billed = INTEREST_METHODS[debt.interest_method].month_end(
+                    debt, current_date
+                )
+                if interest_billed > 0:
+                    debt.balance += interest_billed
+                    debt.interest_charges += interest_billed
+                    debt.min_payment_args["interest_billed"] = interest_billed
+
+                    new_min = compute_min_payment(debt, current_date)
+                    if debt.due_date is not None and new_min > 0:
+                        debt.minimum_payment = new_min
+                        next_due = debt.due_date
+                        while next_due <= current_date:
+                            next_due = _add_month(next_due)
+                        inserted = False
+                        for j in range(i, len(events)):
+                            future_ev = events[j]
+                            if (
+                                future_ev.date == next_due
+                                and future_ev.type == "debt_min"
+                                and (future_ev.debt or future_ev.name) == debt.name
+                            ):
+                                future_ev.amount = new_min
+                                inserted = True
+                                break
+                            if future_ev.date > next_due:
+                                events.insert(
+                                    j,
+                                    Event(
+                                        date=next_due,
+                                        type="debt_min",
+                                        amount=new_min,
+                                        name=debt.name,
+                                        debt=debt.name,
+                                    ),
+                                )
+                                inserted = True
+                                break
+                        if not inserted:
+                            events.append(
+                                Event(
+                                    date=next_due,
+                                    type="debt_min",
+                                    amount=new_min,
+                                    name=debt.name,
+                                    debt=debt.name,
+                                )
+                            )
+
+                    schedule.append(
+                        {
+                            "date": current_date,
+                            "type": "debt_add",
+                            "description": f"{debt.name} interest",
+                            "amount": interest_billed,
+                            "balance": balance,
+                        }
+                    )
 
         if debug and debt_log is not None:
             debt_log.append(
@@ -482,6 +618,12 @@ def daily_avalanche_schedule(
                     "date": current_date,
                     "balance": balance,
                     "debts": {d.name: d.balance for d in debts},
+                    "subject_to_interest": {
+                        d.name: d.balance_subject_to_interest for d in debts
+                    },
+                    "interest_charges": {
+                        d.name: d.interest_charges for d in debts
+                    },
                 }
             )
 
@@ -492,6 +634,7 @@ def daily_avalanche_schedule(
             "name": d.name,
             "balance": d.balance,
             "interest_accrued": d.interest_accrued,
+            "interest_charges": d.interest_charges,
             "next_due_date": None
             if d.paid_off_date
             else _next_due_date(d.due_date, end),

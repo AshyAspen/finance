@@ -260,6 +260,16 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     paychecks = data.get("paychecks", [])
     bills = data.get("bills", [])
     debts = data.get("debts", [])
+    for d in debts:
+        if d.get("min_payment_formula") == "apple_card":
+            if d.get("installment_due") and d.get("installment_term") and not d.get("financing_balance"):
+                d["financing_balance"] = float(Decimal(str(d["installment_due"])) * Decimal(str(d["installment_term"])))
+            if d.get("interest_billed", 0) in (0, "0", 0.0):
+                resp = input(
+                    f"Interest charged on last {d['name']} statement [0]: "
+                ).strip()
+                if resp:
+                    d["interest_billed"] = float(resp)
     goals = [g for g in data.get("goals", []) if g.get("enabled", True)]
 
     debt_log = None
@@ -337,6 +347,11 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
         d["balance"] = ev["balance"]
 
     debt_map = {entry["date"]: entry["debts"] for entry in debt_log} if debt_log else {}
+    interest_map = (
+        {entry["date"]: entry.get("interest_charges", {}) for entry in debt_log}
+        if debt_log
+        else {}
+    )
 
     for day in sorted(daily):
         d = daily[day]
@@ -344,7 +359,13 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
         line = f"{day}: balance=${d['balance']:.2f}{marker}"
         if debt_map:
             debts_str = ", ".join(
-                f"{name}=${bal:.2f}" for name, bal in debt_map.get(day, {}).items()
+                f"{name}=${bal:.2f}"
+                + (
+                    f" (interest=${interest_map.get(day, {}).get(name, Decimal('0')):.2f})"
+                    if interest_map
+                    else ""
+                )
+                for name, bal in debt_map.get(day, {}).items()
             )
             if debts_str:
                 line += f" | debts: {debts_str}"
