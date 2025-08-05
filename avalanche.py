@@ -122,9 +122,13 @@ def _build_events(
     # Recurring bills
     for b in bills:
         current = _parse_date(b["date"])
-        while current < start:
+        term = int(b.get("term_months", 0))
+        generated = 0
+        while current < start and (not term or generated < term):
             current = _add_month(current)
-        while current <= end:
+            if term:
+                generated += 1
+        while current <= end and (not term or generated < term):
             if "debt" in b:
                 events.append(
                     Event(
@@ -145,6 +149,8 @@ def _build_events(
                     )
                 )
             current = _add_month(current)
+            if term:
+                generated += 1
 
     # One-time goals
     for g in goals:
@@ -283,6 +289,7 @@ def daily_avalanche_schedule(
                     "due_date",
                     "min_payment_formula",
                     "interest_method",
+                    "installment_term",
                 }
             },
             balance_subject_to_interest=Decimal(str(d["balance"])),
@@ -291,6 +298,13 @@ def daily_avalanche_schedule(
         for d in debts_input
     ]
     debt_lookup = {d.name: d for d in debts}
+
+    # Recompute minimum payments using any configured formulas so the first
+    # scheduled payment reflects up-to-date parameters such as previously billed
+    # interest supplied by the user.
+    for d in debts:
+        if d.min_payment_formula:
+            d.minimum_payment = compute_min_payment(d, start)
 
     events = _build_events(paychecks, bills, goals, debts, start, lookahead_end)
 

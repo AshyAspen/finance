@@ -81,7 +81,8 @@
       "name": "iPhone Installment",
       "amount": 54.08,
       "date": "2025-07-31",
-      "debt": "Apple Card"
+      "debt": "Apple Card",
+      "term_months": 24
     }
   ],
   "debts": [
@@ -104,7 +105,7 @@
     {
       "name": "Apple Card",
       "balance": 4145.93,
-      "minimum_payment": 173.08,
+      "minimum_payment": 0.0,
       "apr": 26.24,
       "due_date": "2025-08-11",
       "min_payment_formula": "apple_card",
@@ -112,7 +113,9 @@
       "unpaid_daily_cash": 0,
       "interest_billed": 0,
       "past_due": 0,
-      "installment_due": 54.08
+      "installment_due": 54.08,
+      "installment_term": 24,
+      "financing_balance": 1297.92
     },
     {
       "name": "Alpheon Loan",
