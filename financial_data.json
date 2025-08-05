@@ -89,45 +89,48 @@
     {
       "name": "Patient Fi Loan",
       "balance": 1555.0,
-      "minimum_payment": 64.8,
+      "min_payment_formula": 64.8,
       "apr": 0.0,
       "due_date": "2025-08-02"
     },
     {
       "name": "Citi Card",
       "balance": 1925.0,
-      "minimum_payment": 20.0,
       "apr": 23.24,
       "due_date": "2025-07-25",
-      "min_payment_formula": "credit_card",
       "interest_method": "credit_card"
     },
     {
       "name": "Apple Card",
       "balance": 4145.93,
-      "minimum_payment": 0.0,
       "apr": 26.24,
       "due_date": "2025-08-11",
-      "min_payment_formula": "apple_card",
       "interest_method": "apple_card",
-      "unpaid_daily_cash": 0,
-      "interest_billed": 0,
-      "past_due": 0,
-      "installment_due": 54.08,
-      "installment_term": 24,
-      "financing_balance": 1297.92
+      "min_payment_args": {
+        "statement_balance": 4145.93,
+        "interest_accrued": 0,
+        "installments": [
+          {
+            "balance": 1297.92,
+            "minimum_payment": 54.08,
+            "term_months": 24,
+            "start_date": "2025-07-31"
+          }
+        ],
+        "daily_cash_adjustments": []
+      }
     },
     {
       "name": "Alpheon Loan",
       "balance": 5195.0,
-      "minimum_payment": 153.0,
+      "min_payment_formula": 153.0,
       "apr": 0.0,
       "due_date": "2025-08-15"
     },
     {
       "name": "Auto Loan",
       "balance": 25970.64,
-      "minimum_payment": 463.11,
+      "min_payment_formula": 463.11,
       "apr": 8.5,
       "due_date": "2025-08-01"
     }

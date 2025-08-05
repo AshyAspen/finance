@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(Path(__file__).resolve().parent, "..")))
 
 import avalanche
+from min_payments.apple_card import calculate as apple_card_min_payment
 
 
 def test_apple_card_interest_no_compounding(monkeypatch):
@@ -23,8 +24,7 @@ def test_apple_card_interest_no_compounding(monkeypatch):
             "name": "Apple Card",
             "balance": 1000.0,
             "apr": 24.0,
-            "minimum_payment": 0.0,
-            "min_payment_formula": "apple_card",
+            "min_payment_formula": apple_card_min_payment,
             "interest_method": "apple_card",
         }
     ]

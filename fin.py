@@ -7,6 +7,8 @@ import json
 from typing import Dict, List
 
 from avalanche import daily_avalanche_schedule
+from min_payments.apple_card import calculate as apple_card_min_payment
+from min_payments.credit_card import calculate as credit_card_min_payment
 
 
 DATA_FILE = Path(__file__).with_name("financial_data.json")
@@ -261,15 +263,24 @@ def run_simulation(data: Dict, debug: bool = False) -> None:
     bills = data.get("bills", [])
     debts = data.get("debts", [])
     for d in debts:
-        if d.get("min_payment_formula") == "apple_card":
-            if d.get("installment_due") and d.get("installment_term") and not d.get("financing_balance"):
-                d["financing_balance"] = float(Decimal(str(d["installment_due"])) * Decimal(str(d["installment_term"])))
-            if d.get("interest_billed", 0) in (0, "0", 0.0):
+        if d.get("name") == "Apple Card":
+            d["min_payment_formula"] = apple_card_min_payment
+            args = d.setdefault("min_payment_args", {})
+            if args.get("interest_accrued", 0) in (0, "0", 0.0):
                 resp = input(
-                    f"Interest charged on last {d['name']} statement [0]: "
+                    f"Interest accrued on last {d['name']} statement [0]: "
                 ).strip()
                 if resp:
-                    d["interest_billed"] = float(resp)
+                    args["interest_accrued"] = float(resp)
+        elif d.get("name") == "Citi Card":
+            d["min_payment_formula"] = credit_card_min_payment
+
+        args = d.get("min_payment_args")
+        if args:
+            print(f"\nMinimum payment details for {d['name']}:")
+            for k, v in args.items():
+                print(f"  {k}: {v}")
+            input("Press Enter to continue...")
     goals = [g for g in data.get("goals", []) if g.get("enabled", True)]
 
     debt_log = None

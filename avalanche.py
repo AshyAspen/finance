@@ -13,12 +13,11 @@ debt, and interest is accrued on all outstanding debts at the end of the day.
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Iterable, List, Optional, Tuple
+from decimal import Decimal
+from typing import Callable, Iterable, List, Optional, Tuple
 from calendar import monthrange
 
 from cash_flow import projected_min_balance
-from minimum_payments import FORMULAS
 from interest import INTEREST_METHODS
 
 
@@ -46,7 +45,7 @@ class Debt:
     interest_accrued: Decimal = Decimal("0")
     interest_buffer: Decimal = Decimal("0")
     interest_charges: Decimal = Decimal("0")
-    min_payment_formula: Optional[str] = None
+    min_payment_formula: Optional[Callable[[object, date], Decimal]] = None
     min_payment_args: dict = field(default_factory=dict)
     balance_subject_to_interest: Decimal = Decimal("0")
     grace_charges: List[Tuple[date, Decimal]] = field(default_factory=list)
@@ -200,14 +199,8 @@ def _next_due_date(due: Optional[date], end: date) -> Optional[date]:
 def compute_min_payment(debt: Debt, as_of: date) -> Decimal:
     """Return the minimum payment for ``debt`` based on configured formulas."""
 
-    if debt.min_payment_formula:
-        try:
-            formula = FORMULAS[debt.min_payment_formula]
-        except KeyError:  # pragma: no cover - defensive branch
-            raise ValueError(
-                f"Unknown minimum payment formula: {debt.min_payment_formula}"
-            )
-        return formula(debt, as_of)
+    if callable(debt.min_payment_formula):
+        return debt.min_payment_formula(debt, as_of)
 
     return debt.minimum_payment
 
@@ -269,34 +262,41 @@ def daily_avalanche_schedule(
     lookahead_end = max(end, start + timedelta(days=365))
 
     # Prepare debt objects for tracking balances and APRs
-    debts: List[Debt] = [
-        Debt(
-            name=d["name"],
-            balance=Decimal(str(d["balance"])),
-            apr=Decimal(str(d["apr"])),
-            minimum_payment=Decimal(str(d.get("minimum_payment", 0))),
-            due_date=_parse_date(d["due_date"]) if d.get("due_date") else None,
-            min_payment_formula=d.get("min_payment_formula"),
-            min_payment_args={
-                k: Decimal(str(v))
-                for k, v in d.items()
-                if k
-                not in {
-                    "name",
-                    "balance",
-                    "apr",
-                    "minimum_payment",
-                    "due_date",
-                    "min_payment_formula",
-                    "interest_method",
-                    "installment_term",
-                }
-            },
-            balance_subject_to_interest=Decimal(str(d["balance"])),
-            interest_method=d.get("interest_method", "credit_card"),
+    debts: List[Debt] = []
+    for d in debts_input:
+        args = {}
+        for k, v in d.get("min_payment_args", {}).items():
+            if isinstance(v, list):
+                if v and isinstance(v[0], dict):
+                    args[k] = v
+                else:
+                    args[k] = [Decimal(str(x)) for x in v]
+            else:
+                args[k] = Decimal(str(v))
+
+        formula = d.get("min_payment_formula")
+        minimum = Decimal("0")
+        callable_formula: Optional[Callable[[object, date], Decimal]] = None
+        if callable(formula):
+            callable_formula = formula
+        elif formula is not None:
+            minimum = Decimal(str(formula))
+        else:
+            minimum = Decimal(str(d.get("minimum_payment", 0)))
+
+        debts.append(
+            Debt(
+                name=d["name"],
+                balance=Decimal(str(d["balance"])),
+                apr=Decimal(str(d["apr"])),
+                minimum_payment=minimum,
+                due_date=_parse_date(d["due_date"]) if d.get("due_date") else None,
+                min_payment_formula=callable_formula,
+                min_payment_args=args,
+                balance_subject_to_interest=Decimal(str(d["balance"])),
+                interest_method=d.get("interest_method", "credit_card"),
+            )
         )
-        for d in debts_input
-    ]
     debt_lookup = {d.name: d for d in debts}
 
     # Recompute minimum payments using any configured formulas so the first
@@ -553,13 +553,13 @@ def daily_avalanche_schedule(
         next_day = current_date + timedelta(days=1)
         if next_day.month != current_date.month:
             for debt in debts:
-                interest_billed = INTEREST_METHODS[debt.interest_method].month_end(
+                interest_accrued = INTEREST_METHODS[debt.interest_method].month_end(
                     debt, current_date
                 )
-                if interest_billed > 0:
-                    debt.balance += interest_billed
-                    debt.interest_charges += interest_billed
-                    debt.min_payment_args["interest_billed"] = interest_billed
+                if interest_accrued > 0:
+                    debt.balance += interest_accrued
+                    debt.interest_charges += interest_accrued
+                    debt.min_payment_args["interest_accrued"] = interest_accrued
 
                     new_min = compute_min_payment(debt, current_date)
                     if debt.due_date is not None and new_min > 0:
@@ -607,7 +607,7 @@ def daily_avalanche_schedule(
                             "date": current_date,
                             "type": "debt_add",
                             "description": f"{debt.name} interest",
-                            "amount": interest_billed,
+                            "amount": interest_accrued,
                             "balance": balance,
                         }
                     )
